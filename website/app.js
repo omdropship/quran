@@ -21,102 +21,66 @@ function escapeHTML(value) {
   })[char]);
 }
 
-function getLatinName(surah) {
-  return surah.name?.transliteration?.id
-    || surah.name?.transliteration?.en
-    || surah.name?.short
-    || `Surah ${surah.number}`;
+function latinName(s) {
+  return s.name?.transliteration?.id
+    || s.name?.transliteration?.en
+    || `Surah ${s.number}`;
 }
 
-function getArabicName(surah) {
-  return surah.name?.short || '';
-}
-
-function getAyahCount(surah) {
-  return surah.numberOfVerses
-    ?? surah.verses?.length
-    ?? 0;
+function arabicName(s) {
+  return s.name?.short || '';
 }
 
 async function loadQuran() {
   const response = await fetch(QURAN_URL);
 
   if (!response.ok) {
-    throw new Error('Gagal memuat data Al-Qur’an.');
+    throw new Error(`Data Quran gagal dimuat: ${response.status}`);
   }
 
   const json = await response.json();
   quranData = getSurahs(json);
 
   if (!quranData.length) {
-    throw new Error('Format data surah tidak ditemukan.');
+    throw new Error('Data surah tidak ditemukan.');
   }
-
-  return quranData;
 }
 
 function renderSurahList(keyword = '') {
   const list = document.getElementById('surah-list');
   if (!list) return;
 
-  const search = keyword.toLowerCase().trim();
+  const key = keyword.toLowerCase().trim();
 
-  const filtered = quranData.filter(surah => {
-    const latin = getLatinName(surah).toLowerCase();
-    const arabic = getArabicName(surah);
-    const number = String(surah.number);
-
-    return latin.includes(search)
-      || arabic.includes(search)
-      || number.includes(search);
+  const filtered = quranData.filter(s => {
+    return latinName(s).toLowerCase().includes(key)
+      || arabicName(s).includes(key)
+      || String(s.number).includes(key);
   });
 
   if (!filtered.length) {
-    list.innerHTML = `
-      <li>
-        <div class="item-content">
-          <div class="item-inner">
-            <div class="item-title text-color-gray">
-              Surah tidak ditemukan.
-            </div>
-          </div>
-        </div>
-      </li>`;
+    list.innerHTML = '<li><div class="item-content"><div class="item-inner">Surah tidak ditemukan.</div></div></li>';
     return;
   }
 
-  list.innerHTML = filtered.map(surah => `
+  list.innerHTML = filtered.map(s => `
     <li>
-      <a href="/surah/${Number(surah.number)}/"
-         class="item-link item-content">
+      <a href="/surah/${Number(s.number)}/" class="item-link item-content">
         <div class="item-media">
-          <div style="
-            width:42px;
-            height:42px;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            background:#e8f1eb;
-            color:#155b45;
-            border-radius:12px;
-            font-weight:bold;">
-            ${escapeHTML(surah.number)}
+          <div style="width:42px;height:42px;display:flex;align-items:center;justify-content:center;background:#e8f1eb;color:#155b45;border-radius:12px;font-weight:bold">
+            ${escapeHTML(s.number)}
           </div>
         </div>
-
         <div class="item-inner">
           <div class="item-title-row">
-            <div class="item-title">
-              ${escapeHTML(getLatinName(surah))}
-            </div>
+            <div class="item-title">${escapeHTML(latinName(s))}</div>
             <div class="item-after" style="font-size:20px;color:#155b45">
-              ${escapeHTML(getArabicName(surah))}
+              ${escapeHTML(arabicName(s))}
             </div>
           </div>
-
           <div class="item-subtitle">
-            ${escapeHTML(surah.translation || '')}
-            · ${escapeHTML(getAyahCount(surah))} Ayat
+            ${escapeHTML(s.translation || '')}
+            · ${escapeHTML(s.numberOfVerses ?? s.verses?.length ?? 0)} Ayat
           </div>
         </div>
       </a>
@@ -125,71 +89,44 @@ function renderSurahList(keyword = '') {
 }
 
 function renderSurahPage(number) {
-  const surah = quranData.find(
-    item => Number(item.number) === Number(number)
-  );
+  const s = quranData.find(x => Number(x.number) === Number(number));
 
-  if (!surah) {
+  if (!s) {
     return `
-      <div class="page" data-name="not-found">
+      <div class="page">
         <div class="navbar">
           <div class="navbar-inner">
-            <div class="left">
-              <a href="/" class="link back">Kembali</a>
-            </div>
+            <div class="left"><a href="/" class="link">Kembali</a></div>
             <div class="title">Surah tidak ditemukan</div>
           </div>
         </div>
         <div class="page-content">
-          <div class="block text-align-center">
-            Surah tidak ditemukan.
-          </div>
+          <div class="block">Surah tidak ditemukan.</div>
         </div>
       </div>`;
   }
 
-  const verses = Array.isArray(surah.verses) ? surah.verses : [];
+  const verses = Array.isArray(s.verses) ? s.verses : [];
 
-  const ayahHTML = verses.map((ayah, index) => {
-    const ayahNumber = ayah.number?.inSurah
-      ?? ayah.number
-      ?? index + 1;
-
-    const arabic = ayah.text?.arab
-      ?? ayah.text
-      ?? '';
-
-    const translation = ayah.translation?.id
-      ?? ayah.translation
-      ?? '';
+  const ayatHTML = verses.map((a, i) => {
+    const number = a.number?.inSurah ?? a.number ?? i + 1;
+    const arabic = a.text?.arab ?? a.text ?? '';
+    const translation = a.translation?.id ?? a.translation ?? '';
 
     return `
       <div class="card card-outline" style="border-radius:14px">
         <div class="card-content card-content-padding">
-
-          <div class="display-flex justify-content-space-between align-items-center">
-            <span class="badge color-green">
-              Ayat ${escapeHTML(ayahNumber)}
-            </span>
-          </div>
-
-          <div class="text-align-right"
-               style="font-size:27px;line-height:2.1;margin-top:18px;direction:rtl">
+          <span class="badge color-green">Ayat ${escapeHTML(number)}</span>
+          <div style="font-size:28px;line-height:2.1;text-align:right;direction:rtl;margin:18px 0">
             ${escapeHTML(arabic)}
           </div>
-
-          <div class="margin-top">
-            ${escapeHTML(translation)}
-          </div>
-
+          <div>${escapeHTML(translation)}</div>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
 
   return `
     <div class="page" data-name="surah">
-
       <div class="navbar">
         <div class="navbar-inner">
           <div class="left">
@@ -197,68 +134,51 @@ function renderSurahPage(number) {
               <i class="icon f7-icons">arrow_left</i>
             </a>
           </div>
-          <div class="title">${escapeHTML(getLatinName(surah))}</div>
+          <div class="title">${escapeHTML(latinName(s))}</div>
         </div>
       </div>
 
       <div class="page-content">
-
         <div class="block">
           <div class="card" style="background:#155b45;color:white;border-radius:18px">
             <div class="card-content card-content-padding text-align-center">
-              <div style="font-size:30px;color:#f3d98c">
-                ${escapeHTML(getArabicName(surah))}
-              </div>
-              <h2>${escapeHTML(getLatinName(surah))}</h2>
-              <p>${escapeHTML(surah.translation || '')}</p>
-              <p>${escapeHTML(getAyahCount(surah))} Ayat</p>
+              <div style="font-size:30px;color:#f3d98c">${escapeHTML(arabicName(s))}</div>
+              <h2>${escapeHTML(latinName(s))}</h2>
+              <p>${escapeHTML(s.translation || '')}</p>
+              <p>${verses.length} Ayat</p>
             </div>
           </div>
         </div>
 
-        ${Number(surah.number) !== 1 && Number(surah.number) !== 9
-          ? `<div class="block text-align-center" style="font-size:25px;direction:rtl">
-               بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
-             </div>`
+        ${Number(s.number) !== 1 && Number(s.number) !== 9
+          ? '<div class="block text-align-center" style="font-size:26px;direction:rtl">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>'
           : ''}
 
-        <div class="block-title">Bacaan Surah</div>
-
-        ${ayahHTML || '<div class="block">Ayat belum tersedia.</div>'}
+        ${ayatHTML || '<div class="block">Ayat belum tersedia.</div>'}
 
         <div class="block">
           <div class="row">
             <div class="col">
-              ${Number(surah.number) > 1
-                ? `<a href="/surah/${Number(surah.number) - 1}/"
-                     class="button button-outline button-round">
-                     Surah Sebelumnya
-                   </a>`
+              ${Number(s.number) > 1
+                ? `<a href="/surah/${Number(s.number) - 1}/" class="button button-outline">Sebelumnya</a>`
                 : ''}
             </div>
             <div class="col">
-              ${Number(surah.number) < 114
-                ? `<a href="/surah/${Number(surah.number) + 1}/"
-                     class="button button-fill button-round"
-                     style="background:#155b45">
-                     Surah Berikutnya
-                   </a>`
+              ${Number(s.number) < 114
+                ? `<a href="/surah/${Number(s.number) + 1}/" class="button button-fill" style="background:#155b45">Berikutnya</a>`
                 : ''}
             </div>
           </div>
         </div>
-
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
-function initQuranApp() {
+function initApp() {
   app = new Framework7({
     el: '#app',
     name: "Al-Qur'an Digital",
     theme: 'auto',
-
     routes: [
       {
         path: '/',
@@ -266,12 +186,8 @@ function initQuranApp() {
       },
       {
         path: '/surah/:number/',
-        async: async function ({ to, resolve, reject }) {
+        async: function ({ to, resolve, reject }) {
           try {
-            if (!quranData.length) {
-              await loadQuran();
-            }
-
             resolve({
               content: renderSurahPage(to.params.number)
             });
@@ -284,50 +200,33 @@ function initQuranApp() {
     ]
   });
 
-  app.on('pageInit', function (page) {
-    if (page.name === 'home') {
-      renderSurahList();
+  // Render langsung setelah aplikasi dibuat.
+  renderSurahList();
 
-      const search = document.getElementById('surah-search');
+  // Aktifkan pencarian.
+  const search = document.getElementById('surah-search');
 
-      if (search && !search.dataset.bound) {
-        search.dataset.bound = 'true';
-        search.addEventListener('input', () => {
-          renderSurahList(search.value);
-        });
-      }
-    }
-  });
+  if (search) {
+    search.addEventListener('input', function () {
+      renderSurahList(this.value);
+    });
+  }
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-  const errorBox = document.getElementById('home-error');
-
+document.addEventListener('DOMContentLoaded', async function () {
   try {
     await loadQuran();
+
     document.getElementById('surah-total').textContent =
       `${quranData.length} Surah`;
 
-    initQuranApp();
+    initApp();
   } catch (error) {
     console.error(error);
 
-    if (errorBox) {
-      errorBox.textContent = error.message;
-    }
+    document.getElementById('home-error').textContent = error.message;
 
-    const list = document.getElementById('surah-list');
-    if (list) {
-      list.innerHTML = `
-        <li>
-          <div class="item-content">
-            <div class="item-inner">
-              <div class="item-title text-color-red">
-                Gagal memuat data Al-Qur'an.
-              </div>
-            </div>
-          </div>
-        </li>`;
-    }
+    document.getElementById('surah-list').innerHTML =
+      '<li><div class="item-content"><div class="item-inner">Gagal memuat daftar surah.</div></div></li>';
   }
 });
