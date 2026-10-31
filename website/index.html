@@ -1,91 +1,77 @@
+<script src="https://cdn.jsdelivr.net/npm/framework7@8.3.0/framework7-bundle.min.js"></script>
 
-<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <meta name="theme-color" content="#064e3b">
-  <meta name="description" content="Baca Al-Qur'an digital lengkap dengan terjemahan, tafsir, dan audio murottal.">
-  <title>Al-Qur'an Digital</title>
+<script>
+  const app = new Framework7({
+    el: '#app',
+    name: "Al-Qur'an Digital",
+    theme: 'md',
+    routes: [
+      {
+        path: '/surah/:number/',
+        async: async ({ to, resolve, reject }) => {
+          try {
+            const response = await fetch('./data/quran.json');
+            const result = await response.json();
 
-  <!-- Framework7 CSS -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/framework7@8.3.0/framework7-bundle.min.css">
-</head>
+            const surahs = Array.isArray(result)
+              ? result
+              : result.data;
 
-<body>
-  <div id="app">
-    <div class="view view-main view-init">
-      <div class="page" data-name="home">
+            const surah = surahs.find(
+              item => Number(item.number) === Number(to.params.number)
+            );
 
-        <!-- Navbar -->
-        <div class="navbar">
-          <div class="navbar-bg"></div>
-          <div class="navbar-inner">
-            <div class="title">Al-Qur'an Digital</div>
-          </div>
-        </div>
+            if (!surah) {
+              reject();
+              return;
+            }
 
-        <!-- Konten -->
-        <div class="page-content">
-
-          <div class="block text-align-center">
-            <h2>بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</h2>
-            <p>Temukan ketenangan dalam membaca Al-Qur'an</p>
-          </div>
-
-          <div class="block-title">Daftar Surah</div>
-
-          <div class="list">
-            <ul id="surah-list">
-              <li class="item-content">
-                <div class="item-inner">
-                  <div class="item-title">
-                    Memuat daftar surah...
+            const page = `
+              <div class="page" data-name="surah">
+                <div class="navbar">
+                  <div class="navbar-bg"></div>
+                  <div class="navbar-inner">
+                    <div class="left">
+                      <a href="#" class="link back">
+                        <i class="icon icon-back"></i>
+                      </a>
+                    </div>
+                    <div class="title">
+                      ${surah.name?.transliteration?.id || 'Baca Surah'}
+                    </div>
                   </div>
                 </div>
-              </li>
-            </ul>
-          </div>
+                <div class="page-content">
+                  <div class="block text-align-center">
+                    <h2>${surah.name?.short || ''}</h2>
+                    <p>${surah.numberOfVerses} ayat</p>
+                  </div>
+                  <div id="ayat-list" class="list simple-list">
+                    <ul>
+                      ${surah.verses.map(ayat => `
+                        <li style="display:block; padding:20px 16px;">
+                          <div>${ayat.number?.inSurah || ayat.number || ''}</div>
+                          <h2 style="text-align:right; line-height:2;">
+                            ${ayat.text?.arab || ''}
+                          </h2>
+                          <p>${ayat.translation?.id || ''}</p>
+                        </li>
+                      `).join('')}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            `;
 
-        </div>
+            resolve({ content: page });
+          } catch (error) {
+            console.error(error);
+            reject();
+          }
+        }
+      }
+    ]
+  });
+</script>
 
-        <!-- Navigasi bawah -->
-        <div class="toolbar toolbar-bottom tabbar">
-          <div class="toolbar-inner">
-
-            <a href="/" class="tab-link tab-link-active">
-              <span class="tabbar-label">Beranda</span>
-            </a>
-
-            <a href="/bookmark/" class="tab-link">
-              <span class="tabbar-label">Bookmark</span>
-            </a>
-
-            <a href="/pengaturan/" class="tab-link">
-              <span class="tabbar-label">Pengaturan</span>
-            </a>
-
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-  <!-- Framework7 JavaScript -->
-  <script src="https://cdn.jsdelivr.net/npm/framework7@8.3.0/framework7-bundle.min.js"></script>
-
-  <!-- Inisialisasi Framework7 -->
-  <script>
-    const app = new Framework7({
-      el: '#app',
-      name: "Al-Qur'an Digital",
-      theme: 'md'
-    });
-  </script>
-
-  <!-- JavaScript aplikasi -->
-  <script src="app.js"></script>
-
-</body>
-</html>
+<script src="app.js"></script>
