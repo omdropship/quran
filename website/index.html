@@ -49,6 +49,44 @@
     .bismillah {font-size:calc(var(--ar-size) - 2px);direction:rtl}
     :root.hide-tr .verse-tr {display:none}
 
+    /* Bar atas/bawah: warna eksplisit agar sama di iOS & Material, terang & gelap */
+    :root {
+      --f7-bars-bg-color: #155b45; --f7-bars-bg-color-rgb: 21,91,69;
+      --f7-bars-text-color: #ffffff; --f7-bars-link-color: #f3d98c;
+    }
+    :root.theme-dark {
+      --f7-bars-bg-color: #0f3d2f; --f7-bars-bg-color-rgb: 15,61,47;
+    }
+    .navbar-bg { background: #155b45 !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+    .navbar .title, .navbar .navbar-inner { color: #ffffff; }
+    .navbar .link, .navbar .link i { color: #f3d98c; }
+    .toolbar, .toolbar .toolbar-bg { background: #fffdf5 !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+    .toolbar .link { color: #155b45; }
+    .toolbar .link.disabled { opacity: .4; }
+
+    /* Mode gelap: teks harus terbaca */
+    :root.theme-dark .navbar-bg { background: #0f3d2f !important; }
+    :root.theme-dark .toolbar, :root.theme-dark .toolbar .toolbar-bg { background: #101a15 !important; }
+    :root.theme-dark .toolbar .link { color: #e6c779; }
+    :root.theme-dark body, :root.theme-dark .page, :root.theme-dark .page-content,
+    :root.theme-dark .block, :root.theme-dark .card, :root.theme-dark .list,
+    :root.theme-dark .item-content, :root.theme-dark .item-inner, :root.theme-dark .item-title,
+    :root.theme-dark .item-subtitle, :root.theme-dark .verse-tr, :root.theme-dark .verse-ar,
+    :root.theme-dark .bismillah, :root.theme-dark h1, :root.theme-dark h2, :root.theme-dark h3,
+    :root.theme-dark .badge { color: #e8efe9 !important; }
+    :root.theme-dark .badge { background: #1f7a5c !important; color: #fff !important; }
+    :root.theme-dark .block-title, :root.theme-dark .block-footer,
+    :root.theme-dark .item-after, :root.theme-dark .item-subtitle,
+    :root.theme-dark .text-color-gray { color: #9fb5aa !important; }
+    :root.theme-dark .item-after.ar-text { color: var(--f7-theme-color) !important; }
+    :root.theme-dark .text-color-green { color: #4cc39a !important; }
+    :root.theme-dark .card-outline { border-color: rgba(255,255,255,.14) !important; }
+    :root.theme-dark .searchbar input[type=search] { background: rgba(255,255,255,.14) !important; color: #fff !important; }
+    :root.theme-dark .searchbar input[type=search]::placeholder { color: rgba(255,255,255,.6); }
+    .hero h2, :root.theme-dark .hero h2 { color: #ffffff !important; }
+    .hero p, :root.theme-dark .hero p { color: #e4eee8 !important; }
+    .hero .gold, :root.theme-dark .hero .gold { color: #f3d98c !important; }
+
     /* Tablet / layar lebar: konten dibatasi agar nyaman dibaca */
     @media (min-width: 768px) {
       .page-content > .block, .page-content > .list, .page-content > .card,
