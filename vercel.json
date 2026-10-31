@@ -4,7 +4,9 @@
   "buildCommand": "mkdir -p website/data && cp data/quran.json website/data/quran.json && node scripts/build-data.js",
   "outputDirectory": "website",
   "rewrites": [
-    { "source": "/surah/(.*)", "destination": "/index.html" }
+    { "source": "/surah/(.*)", "destination": "/index.html" },
+    { "source": "/pengaturan", "destination": "/index.html" },
+    { "source": "/pengaturan/", "destination": "/index.html" }
   ],
   "headers": [
     {
