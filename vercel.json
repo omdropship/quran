@@ -1,6 +1,17 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": "mkdir -p website/data && cp data/quran.json website/data/quran.json",
-  "outputDirectory": "website"
+  "buildCommand": "mkdir -p website/data && cp data/quran.json website/data/quran.json && node scripts/build-data.js",
+  "outputDirectory": "website",
+  "rewrites": [
+    { "source": "/surah/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/data/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" }
+      ]
+    }
+  ]
 }
