@@ -11,67 +11,105 @@
   <link rel="preload" href="/data/surah-list.json" as="fetch" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/framework7@8.3.0/framework7-bundle.min.css">
   <style>
-    #splash{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#155b45;color:#f3d98c;text-align:center}
-    #splash .ar{font-size:32px;line-height:2}
-    #splash .tx{color:#e4eee8;font-size:14px}
-    .verse-card{content-visibility:auto;contain-intrinsic-size:auto 240px}
+    /* Warna merek (emerald, krem, emas) lewat variabel bawaan Framework7 */
+    :root {
+      --f7-theme-color: #155b45; --f7-theme-color-rgb: 21,91,69;
+      --f7-theme-color-shade: #0f4533; --f7-theme-color-tint: #1c7a5c;
+      --f7-page-bg-color: #faf6ea;
+      --f7-list-bg-color: #fffdf5; --f7-card-bg-color: #fffdf5;
+      --f7-navbar-bg-color: #155b45; --f7-navbar-text-color: #ffffff; --f7-navbar-link-color: #f3d98c;
+      --f7-toolbar-bg-color: #fffdf5; --f7-toolbar-link-color: #155b45;
+      --ar-size: 28px;
+      --gold: #e6c779;
+    }
+    :root.theme-dark {
+      --f7-theme-color: #4cc39a; --f7-theme-color-rgb: 76,195,154;
+      --f7-theme-color-shade: #34a47f; --f7-theme-color-tint: #6fd3b0;
+      --f7-page-bg-color: #0d1612;
+      --f7-list-bg-color: #15211b; --f7-card-bg-color: #15211b;
+      --f7-navbar-bg-color: #0f3d2f;
+      --f7-toolbar-bg-color: #101a15; --f7-toolbar-link-color: #e6c779;
+    }
+
+    #splash {position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#155b45;color:#f3d98c;text-align:center}
+    #splash .ar {font-size:32px;line-height:2}
+    #splash .tx {color:#e4eee8;font-size:14px}
+
+    .ar-text {font-family:"Noto Naskh Arabic","Droid Arabic Naskh","Traditional Arabic","Geeza Pro",serif}
+    .hero {background:linear-gradient(135deg,#155b45,#0f4533);color:#fff;border-radius:18px}
+    .hero .gold {color:#f3d98c}
+    .hero p {color:#e4eee8}
+    .num {width:42px;height:42px;display:flex;align-items:center;justify-content:center;background:#e8f1eb;color:#155b45;border-radius:12px;font-weight:bold}
+    :root.theme-dark .num {background:rgba(76,195,154,.16);color:#7fd8b6}
+    .item-after.ar-text {font-size:20px;color:var(--f7-theme-color)}
+    .btn-gold {background:var(--gold)!important;color:#155b45!important;border-radius:10px}
+
+    .verse-card {border-radius:14px;content-visibility:auto;contain-intrinsic-size:auto 240px}
+    .verse-ar {font-size:var(--ar-size);line-height:2.1;text-align:right;direction:rtl;margin:18px 0}
+    .bismillah {font-size:calc(var(--ar-size) - 2px);direction:rtl}
+    :root.hide-tr .verse-tr {display:none}
+
+    /* Tablet / layar lebar: konten dibatasi agar nyaman dibaca */
+    @media (min-width: 768px) {
+      .page-content > .block, .page-content > .list, .page-content > .card,
+      .page-content > .block-title, .page-content > .block-footer, .page-content > .verses {max-width:760px;margin-left:auto;margin-right:auto}
+      .page-content > .list.inset, .page-content > .block.inset {margin-left:auto;margin-right:auto}
+    }
   </style>
 </head>
 
 <body>
   <div id="app">
-    <div id="splash"><div class="ar">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div><div class="tx">Memuat Al-Qur'an Digital...</div></div>
+    <div id="splash"><div class="ar ar-text">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div><div class="tx">Memuat Al-Qur'an Digital...</div></div>
     <div class="view view-main view-init"></div>
   </div>
 
   <template id="home-tpl">
     <div class="page" data-name="home">
-      <div class="page-content">
-
-        <div class="block">
-          <div>
-            <div class="text-color-green" style="font-size:13px">ASSALAMUALAIKUM</div>
-            <h2 class="margin-top-half margin-bottom-half">Al-Qur'an Digital</h2>
-          </div>
-        </div>
-
-        <div class="block">
-          <div class="card card-outline" style="background:#155b45;color:#fff;border-radius:18px">
-            <div class="card-content card-content-padding">
-              <div class="text-align-center">
-                <div style="font-size:30px;color:#f3d98c">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
-                <h2>Mulai Membaca</h2>
-                <p style="color:#e4eee8">Temukan ketenangan dalam setiap ayat Al-Qur'an.</p>
-                <a href="/surah/1/" class="button button-fill"
-                   style="background:#e6c779;color:#155b45;border-radius:10px">Baca Al-Fatihah</a>
+      <div class="navbar">
+        <div class="navbar-bg"></div>
+        <div class="navbar-inner">
+          <div class="title">Al-Qur'an Digital</div>
+          <div class="right"><a href="/pengaturan/" class="link icon-only" aria-label="Pengaturan"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a></div>
+          <div class="subnavbar">
+            <form class="searchbar" onsubmit="return false">
+              <div class="searchbar-inner">
+                <div class="searchbar-input-wrap">
+                  <input type="search" id="surah-search" placeholder="Cari nama surah..." autocomplete="off">
+                  <i class="searchbar-icon"></i>
+                  <span class="input-clear-button"></span>
+                </div>
+                <span class="searchbar-disable-button if-not-aurora">Batal</span>
               </div>
-            </div>
+            </form>
           </div>
         </div>
+      </div>
 
+      <div class="page-content">
         <div class="block">
-          <div class="row align-items-center">
-            <div class="col"><h3 class="margin-vertical-half">Daftar Surah</h3></div>
-            <div class="col-auto"><span id="surah-total" class="text-color-gray">Memuat...</span></div>
-          </div>
-          <div class="searchbar searchbar-inline">
-            <div class="searchbar-input-wrap">
-              <input type="search" id="surah-search" placeholder="Cari nama surah...">
-              <i class="searchbar-icon"></i>
-              <span class="input-clear-button"></span>
+          <div class="text-color-green" style="font-size:13px">ASSALAMUALAIKUM</div>
+          <div class="card hero" style="margin:12px 0 0">
+            <div class="card-content card-content-padding text-align-center">
+              <div class="gold ar-text" style="font-size:30px;line-height:2">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
+              <h2 style="margin:4px 0">Mulai Membaca</h2>
+              <p>Temukan ketenangan dalam setiap ayat Al-Qur'an.</p>
+              <a href="/surah/1/" class="button button-fill btn-gold">Baca Al-Fatihah</a>
             </div>
           </div>
         </div>
 
-        <div class="list media-list inset margin-top">
-          <ul id="surah-list">
-            <li><div class="item-content"><div class="item-inner"><div class="item-title">Memuat daftar surah...</div></div></div></li>
-          </ul>
+        <div class="block-title display-flex justify-content-space-between">
+          <span>Daftar Surah</span>
+          <span id="surah-total" class="text-color-gray">Memuat...</span>
+        </div>
+
+        <div class="list media-list inset">
+          <ul id="surah-list"><li class="skeleton-text skeleton-effect-fade"><div class="item-content"><div class="item-media"><div class="num">00</div></div><div class="item-inner"><div class="item-title">Nama surah loading</div><div class="item-subtitle">Terjemahan surah · 00 Ayat</div></div></div></li><li class="skeleton-text skeleton-effect-fade"><div class="item-content"><div class="item-media"><div class="num">00</div></div><div class="item-inner"><div class="item-title">Nama surah loading</div><div class="item-subtitle">Terjemahan surah · 00 Ayat</div></div></div></li><li class="skeleton-text skeleton-effect-fade"><div class="item-content"><div class="item-media"><div class="num">00</div></div><div class="item-inner"><div class="item-title">Nama surah loading</div><div class="item-subtitle">Terjemahan surah · 00 Ayat</div></div></div></li><li class="skeleton-text skeleton-effect-fade"><div class="item-content"><div class="item-media"><div class="num">00</div></div><div class="item-inner"><div class="item-title">Nama surah loading</div><div class="item-subtitle">Terjemahan surah · 00 Ayat</div></div></div></li><li class="skeleton-text skeleton-effect-fade"><div class="item-content"><div class="item-media"><div class="num">00</div></div><div class="item-inner"><div class="item-title">Nama surah loading</div><div class="item-subtitle">Terjemahan surah · 00 Ayat</div></div></div></li><li class="skeleton-text skeleton-effect-fade"><div class="item-content"><div class="item-media"><div class="num">00</div></div><div class="item-inner"><div class="item-title">Nama surah loading</div><div class="item-subtitle">Terjemahan surah · 00 Ayat</div></div></div></li></ul>
         </div>
 
         <div id="home-error" class="block text-align-center text-color-red"></div>
         <div class="block text-align-center text-color-gray"><p>Al-Qur'an Digital</p></div>
-
       </div>
     </div>
   </template>
