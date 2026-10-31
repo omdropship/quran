@@ -1,77 +1,101 @@
-<script src="https://cdn.jsdelivr.net/npm/framework7@8.3.0/framework7-bundle.min.js"></script>
 
-<script>
-  const app = new Framework7({
-    el: '#app',
-    name: "Al-Qur'an Digital",
-    theme: 'md',
-    routes: [
-      {
-        path: '/surah/:number/',
-        async: async ({ to, resolve, reject }) => {
-          try {
-            const response = await fetch('./data/quran.json');
-            const result = await response.json();
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#155b45">
+  <meta name="description" content="Baca Al-Qur'an digital lengkap dengan terjemahan bahasa Indonesia.">
+  <title>Al-Qur'an Digital</title>
 
-            const surahs = Array.isArray(result)
-              ? result
-              : result.data;
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/framework7@8.3.0/framework7-bundle.min.css">
+</head>
 
-            const surah = surahs.find(
-              item => Number(item.number) === Number(to.params.number)
-            );
+<body>
+  <div id="app">
+    <div class="view view-main view-init" data-url="/">
+      <div class="page" data-name="home">
+        <div class="page-content">
 
-            if (!surah) {
-              reject();
-              return;
-            }
-
-            const page = `
-              <div class="page" data-name="surah">
-                <div class="navbar">
-                  <div class="navbar-bg"></div>
-                  <div class="navbar-inner">
-                    <div class="left">
-                      <a href="#" class="link back">
-                        <i class="icon icon-back"></i>
-                      </a>
-                    </div>
-                    <div class="title">
-                      ${surah.name?.transliteration?.id || 'Baca Surah'}
-                    </div>
-                  </div>
+          <div class="block">
+            <div class="display-flex justify-content-space-between align-items-center">
+              <div>
+                <div class="text-color-green" style="font-size:13px">
+                  ASSALAMUALAIKUM
                 </div>
-                <div class="page-content">
-                  <div class="block text-align-center">
-                    <h2>${surah.name?.short || ''}</h2>
-                    <p>${surah.numberOfVerses} ayat</p>
+                <h2 class="margin-top-half margin-bottom-half">
+                  Al-Qur'an Digital
+                </h2>
+              </div>
+              <a href="#" class="panel-open" data-panel="left">
+                <i class="f7-icons">line_horizontal_3</i>
+              </a>
+            </div>
+          </div>
+
+          <div class="block">
+            <div class="card card-outline" style="background:#155b45;color:#fff;border-radius:18px">
+              <div class="card-content card-content-padding">
+                <div class="text-align-center">
+                  <div style="font-size:30px;color:#f3d98c">
+                    بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
                   </div>
-                  <div id="ayat-list" class="list simple-list">
-                    <ul>
-                      ${surah.verses.map(ayat => `
-                        <li style="display:block; padding:20px 16px;">
-                          <div>${ayat.number?.inSurah || ayat.number || ''}</div>
-                          <h2 style="text-align:right; line-height:2;">
-                            ${ayat.text?.arab || ''}
-                          </h2>
-                          <p>${ayat.translation?.id || ''}</p>
-                        </li>
-                      `).join('')}
-                    </ul>
-                  </div>
+                  <h2>Mulai Membaca</h2>
+                  <p style="color:#e4eee8">
+                    Temukan ketenangan dalam setiap ayat Al-Qur'an.
+                  </p>
+                  <a href="/surah/1/" class="button button-fill"
+                     style="background:#e6c779;color:#155b45;border-radius:10px">
+                    Baca Al-Fatihah
+                  </a>
                 </div>
               </div>
-            `;
+            </div>
+          </div>
 
-            resolve({ content: page });
-          } catch (error) {
-            console.error(error);
-            reject();
-          }
-        }
-      }
-    ]
-  });
-</script>
+          <div class="block">
+            <div class="row align-items-center">
+              <div class="col">
+                <h3 class="margin-vertical-half">Daftar Surah</h3>
+              </div>
+              <div class="col-auto">
+                <span id="surah-total" class="text-color-gray">Memuat...</span>
+              </div>
+            </div>
 
-<script src="app.js"></script>
+            <div class="searchbar searchbar-inline">
+              <div class="searchbar-input-wrap">
+                <input type="search" id="surah-search" placeholder="Cari nama surah...">
+                <i class="searchbar-icon"></i>
+                <span class="input-clear-button"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="list media-list inset margin-top">
+            <ul id="surah-list">
+              <li>
+                <div class="item-content">
+                  <div class="item-inner">
+                    <div class="item-title">Memuat daftar surah...</div>
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <div id="home-error" class="block text-align-center text-color-red"></div>
+
+          <div class="block text-align-center text-color-gray">
+            <p>Al-Qur'an Digital</p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/framework7@8.3.0/framework7-bundle.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
