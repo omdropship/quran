@@ -1,13 +1,70 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#064e3b">
-    <title>Al-Qur'an Digital</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#064e3b">
+  <title>Al-Qur'an Digital</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/framework7@8.3.0/framework7-bundle.min.css">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Al-Qur'an Digital</h1>
-    <p>Temukan dan baca 114 surah Al-Qur'an.</p>
+  <div id="app">
+    <div class="view view-main view-init">
+      <div class="page" data-name="home">
+
+        <div class="navbar">
+          <div class="navbar-bg"></div>
+          <div class="navbar-inner">
+            <div class="title">Al-Qur'an Digital</div>
+          </div>
+        </div>
+
+        <div class="page-content">
+          <div class="block text-align-center">
+            <h2>بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</h2>
+            <p>Temukan ketenangan dalam membaca Al-Qur'an</p>
+          </div>
+
+          <div class="block-title">Daftar Surah</div>
+          <div class="list">
+            <ul id="surah-list">
+              <li class="item-content">
+                <div class="item-inner">
+                  <div class="item-title">Data surah akan ditampilkan di sini</div>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="toolbar toolbar-bottom tabbar">
+          <div class="toolbar-inner">
+            <a href="/" class="tab-link tab-link-active">
+              <span class="tabbar-label">Beranda</span>
+            </a>
+            <a href="/bookmark/" class="tab-link">
+              <span class="tabbar-label">Bookmark</span>
+            </a>
+            <a href="/pengaturan/" class="tab-link">
+              <span class="tabbar-label">Pengaturan</span>
+            </a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/framework7@8.3.0/framework7-bundle.min.js"></script>
+  <script>
+    const app = new Framework7({
+      el: '#app',
+      name: "Al-Qur'an Digital",
+      theme: 'md'
+    });
+  </script>
 </body>
 </html>
