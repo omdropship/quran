@@ -49,6 +49,131 @@ function deepEqual(a, b) {
   return ka.every((k) => Object.prototype.hasOwnProperty.call(b, k) && deepEqual(a[k], b[k]));
 }
 
+
+/* ---------- SEO: halaman statis per surah, sitemap, robots ---------- */
+
+const SITE_URL = (process.env.SITE_URL || 'https://www.ayatnusa.com').replace(/\/+$/, '');
+const SITE_NAME = process.env.SITE_NAME || 'AyatNusa';
+const WEB = path.join(ROOT, 'website');
+const SEO_VERSES = 20; // sama dengan jumlah ayat yang langsung dirender aplikasi (CHUNK di app.js)
+const HEAD_RE = /<!--seo:head-->[\s\S]*?<!--\/seo:head-->/;
+const BODY_RE = /<!--seo:body-->[\s\S]*?<!--\/seo:body-->/;
+
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const txt = (v) => {
+  if (typeof v === 'string') return v;
+  if (isObj(v)) { if (typeof v.id === 'string') return v.id; if (typeof v.en === 'string') return v.en; }
+  return '';
+};
+const ld = (o) => JSON.stringify(o).replace(/</g, '\\u003c');
+const clip = (t, n) => (t.length <= n ? t : t.slice(0, n - 1).replace(/\s+\S*$/, '') + '…');
+const fill = (tpl, head, body) => tpl
+  .replace(HEAD_RE, () => `<!--seo:head-->\n${head}\n  <!--/seo:head-->`)
+  .replace(BODY_RE, () => `<!--seo:body-->\n${body}\n  <!--/seo:body-->`);
+
+function headHTML({ title, desc, url, graph }) {
+  const img = `${SITE_URL}/og-image.png`;
+  return [
+    `  <title>${esc(title)}</title>`,
+    `  <meta name="description" content="${esc(desc)}">`,
+    `  <meta name="robots" content="index, follow, max-image-preview:large">`,
+    `  <link rel="canonical" href="${url}">`,
+    `  <meta property="og:type" content="website">`,
+    `  <meta property="og:site_name" content="${esc(SITE_NAME)}">`,
+    `  <meta property="og:locale" content="id_ID">`,
+    `  <meta property="og:title" content="${esc(title)}">`,
+    `  <meta property="og:description" content="${esc(desc)}">`,
+    `  <meta property="og:url" content="${url}">`,
+    `  <meta property="og:image" content="${img}">`,
+    `  <meta property="og:image:width" content="1200">`,
+    `  <meta property="og:image:height" content="630">`,
+    `  <meta name="twitter:card" content="summary_large_image">`,
+    `  <meta name="twitter:title" content="${esc(title)}">`,
+    `  <meta name="twitter:description" content="${esc(desc)}">`,
+    `  <meta name="twitter:image" content="${img}">`,
+    `  <script type="application/ld+json">${ld({ '@context': 'https://schema.org', '@graph': graph })}</script>`
+  ].join('\n');
+}
+
+function generateSeo(surahs, versesKey) {
+  const indexPath = path.join(WEB, 'index.html');
+  if (!fs.existsSync(indexPath)) { console.log('SEO dilewati: website/index.html tidak ada'); return; }
+  const src = fs.readFileSync(indexPath, 'utf8');
+  if (!HEAD_RE.test(src) || !BODY_RE.test(src)) {
+    console.log('SEO dilewati: penanda <!--seo:head--> / <!--seo:body--> tidak ada di website/index.html');
+    return;
+  }
+  const tpl = fill(src, '', '');
+  const site = { '@type': 'WebSite', name: SITE_NAME, url: SITE_URL + '/', inLanguage: 'id' };
+  const info = surahs.map((s, i) => ({
+    n: i + 1,
+    latin: txt(s.name && s.name.transliteration) || `Surah ${i + 1}`,
+    arab: (s.name && typeof s.name.short === 'string') ? s.name.short : '',
+    mean: txt(s.name && s.name.translation) || txt(s.translation),
+    rev: txt(s.revelation),
+    count: s.numberOfVerses || s[versesKey].length
+  }));
+
+  // Beranda
+  const homeTitle = `${SITE_NAME} - Al-Qur'an Digital Online, Terjemahan & Audio Murottal`;
+  const homeDesc = `Baca Al-Qur'an online 114 surah lengkap dengan teks Arab, terjemahan Bahasa Indonesia, tafsir, dan audio murottal per ayat. Ringan dan cepat di HP.`;
+  const homeBody = `  <div id="seo">
+    <h1>${esc(SITE_NAME)} - Al-Qur'an Digital</h1>
+    <p>${esc(homeDesc)}</p>
+    <h2>Daftar Surah</h2>
+    <ol>
+${info.map((x) => `      <li><a href="/surah/${x.n}/">${esc(x.latin)}</a> (${esc(x.mean)}) - ${x.count} ayat</li>`).join('\n')}
+    </ol>
+  </div>`;
+  fs.writeFileSync(indexPath, fill(src, headHTML({ title: homeTitle, desc: homeDesc, url: SITE_URL + '/', graph: [{ ...site, description: homeDesc }] }), homeBody));
+
+  // Satu halaman statis per surah (isi sama dengan yang dirender aplikasi, jadi bukan konten berbeda)
+  fs.rmSync(path.join(WEB, 'surah'), { recursive: true, force: true });
+  info.forEach((x, i) => {
+    const s = surahs[i];
+    const url = `${SITE_URL}/surah/${x.n}/`;
+    const title = `Surah ${x.latin} - Arti, Terjemahan & Audio | ${SITE_NAME}`;
+    const desc = clip(`Baca Surah ${x.latin}${x.mean ? ` (${x.mean})` : ''} lengkap: ${x.count} ayat dengan teks Arab, terjemahan Indonesia, tafsir, dan audio murottal. Surah ke-${x.n}${x.rev ? `, ${x.rev}` : ''}.`, 158);
+    const verses = s[versesKey].slice(0, SEO_VERSES);
+    const prev = x.n > 1 ? `<a href="/surah/${x.n - 1}/">&laquo; ${esc(info[i - 1].latin)}</a>` : '';
+    const next = x.n < info.length ? `<a href="/surah/${x.n + 1}/">${esc(info[i + 1].latin)} &raquo;</a>` : '';
+    const body = `  <div id="seo">
+    <nav aria-label="Navigasi"><a href="/">Beranda</a> ${prev} ${next}</nav>
+    <h1>Surah ${esc(x.latin)}${x.arab ? ` (<span lang="ar">${esc(x.arab)}</span>)` : ''}</h1>
+    <p>${esc(x.mean)}${x.mean ? ' · ' : ''}${x.count} ayat${x.rev ? ' · ' + esc(x.rev) : ''} · Surah ke-${x.n}</p>
+${verses.map((v, k) => {
+    const num = (v.number && typeof v.number === 'object') ? v.number.inSurah : (v.number ?? k + 1);
+    const arab = String((v.text && v.text.arab) ?? txt(v.text)).replace(/\ufeff/g, '');
+    return `    <section>
+      <h2>${esc(x.latin)} ayat ${esc(num)}</h2>
+      <p lang="ar" dir="rtl">${esc(arab)}</p>
+      <p>${esc((v.translation && v.translation.id) ?? txt(v.translation))}</p>
+    </section>`;
+  }).join('\n')}
+    <p>Baca seluruh ${x.count} ayat, dengarkan audio, dan buka tafsir di aplikasi ${esc(SITE_NAME)}.</p>
+  </div>`;
+    const graph = [
+      { '@type': 'BreadcrumbList', itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Beranda', item: SITE_URL + '/' },
+        { '@type': 'ListItem', position: 2, name: `Surah ${x.latin}`, item: url }
+      ] },
+      { '@type': 'WebPage', name: title, url, description: desc, inLanguage: 'id', isPartOf: site }
+    ];
+    const dir = path.join(WEB, 'surah', String(x.n));
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'index.html'), fill(tpl, headHTML({ title, desc, url, graph }), body));
+  });
+
+  // sitemap.xml dan robots.txt
+  const today = new Date().toISOString().slice(0, 10);
+  const urls = [SITE_URL + '/', ...info.map((x) => `${SITE_URL}/surah/${x.n}/`)];
+  fs.writeFileSync(path.join(WEB, 'sitemap.xml'),
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${u}</loc><lastmod>${today}</lastmod></url>`).join('\n')}\n</urlset>\n`);
+  fs.writeFileSync(path.join(WEB, 'robots.txt'),
+    `User-agent: *\nAllow: /\nDisallow: /pengaturan/\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
+  console.log(`SEO: beranda + ${info.length} halaman surah, sitemap (${urls.length} alamat), robots.txt untuk ${SITE_URL}`);
+}
+
 function main() {
   const raw = fs.readFileSync(SRC, 'utf8');
   const surahs = findSurahArray(JSON.parse(raw));
@@ -122,5 +247,6 @@ function main() {
   console.log('surah/N.json (total)      :', kb(surahBytes), '| terbesar: surah', maxSurah[0], kb(maxSurah[1]));
   console.log('tafsir/N.json (total)     :', kb(tafsirBytes), '(hanya diunduh saat tafsir dibuka)');
   console.log('OK: 114 surah, gabungan identik dengan sumber.');
+  generateSeo(surahs, versesKey);
 }
 main();
