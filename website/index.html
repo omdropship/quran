@@ -87,6 +87,35 @@
     .hero p, :root.theme-dark .hero p { color: #e4eee8 !important; }
     .hero .gold, :root.theme-dark .hero .gold { color: #f3d98c !important; }
 
+    /* Audio per ayat */
+    .audio-btn {width:36px;min-width:36px;height:32px;padding:0;display:flex;align-items:center;justify-content:center}
+    .audio-btn svg {display:block}
+    .audio-btn .i-pause {display:none}
+    .verse-card.playing .audio-btn .i-play {display:none}
+    .verse-card.playing .audio-btn .i-pause {display:block}
+    :root .verse-card.current {border-color:var(--f7-theme-color)!important;box-shadow:0 0 0 2px rgba(var(--f7-theme-color-rgb),.30)}
+    :root.theme-dark .verse-card.current {border-color:var(--f7-theme-color)!important}
+    .verse-card.current .audio-btn {background:var(--f7-theme-color);color:#fff}
+
+    .tafsir-btn {height:32px;padding:0 12px;display:flex;align-items:center;font-size:13px}
+    .popup .page-content p {margin:0 0 12px;line-height:1.7}
+
+    /* Bilah pemutar audio */
+    .player-bar {position:absolute;left:0;right:0;bottom:calc(var(--f7-toolbar-height, 48px) + var(--f7-safe-area-bottom, 0px));z-index:600;display:none;background:#155b45;color:#fff;box-shadow:0 -2px 10px rgba(0,0,0,.25)}
+    .player-bar.show {display:block}
+    .pb-seek {display:block;width:100%;margin:0;height:16px;background:transparent;accent-color:#e6c779;cursor:pointer}
+    .pb-row {display:flex;align-items:center;gap:2px;padding:0 8px 8px 10px}
+    .pb-info {flex:1;min-width:0;padding:0 6px}
+    .pb-title {white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:14px;color:#fff}
+    .pb-time {font-size:12px;color:#d7e6dd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .pb-btn {width:40px;height:40px;flex:none;display:flex;align-items:center;justify-content:center;color:#f3d98c;border-radius:50%;cursor:pointer;-webkit-tap-highlight-color:transparent}
+    .pb-toggle {background:#e6c779;color:#155b45}
+    .player-bar .i-pause {display:none}
+    .player-bar.is-playing .i-play {display:none}
+    .player-bar.is-playing .i-pause {display:block}
+    .page-content.has-player {padding-bottom:calc(var(--f7-toolbar-height, 48px) + var(--f7-safe-area-bottom, 0px) + 78px) !important}
+    :root.theme-dark .player-bar {background:#0f3d2f}
+
     /* Tablet / layar lebar: konten dibatasi agar nyaman dibaca */
     @media (min-width: 768px) {
       .page-content > .block, .page-content > .list, .page-content > .card,
