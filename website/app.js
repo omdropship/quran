@@ -156,9 +156,16 @@ function getSurah(n) {
 /* ---------- tafsir (diunduh hanya saat tombol Tafsir ditekan) ---------- */
 
 const tafsirCache = new Map();
+// Pada aplikasi Android, tafsir yang tidak dibungkus diambil dari situs (alamat disuntikkan saat build).
+const REMOTE = (typeof window !== 'undefined' && window.QURAN_REMOTE) ? String(window.QURAN_REMOTE).replace(/\/$/, '') : '';
+
 function getTafsir(n) {
   if (tafsirCache.has(n)) return Promise.resolve(tafsirCache.get(n));
-  return fetchJSON(`/data/tafsir/${n}.json`).then((arr) => {
+  const path = `/data/tafsir/${n}.json`;
+  return fetchJSON(path).catch((e) => {
+    if (!REMOTE) throw e;
+    return fetchJSON(REMOTE + path);
+  }).then((arr) => {
     if (!Array.isArray(arr)) throw new Error('Format tafsir tidak dikenal');
     tafsirCache.set(n, arr);
     return arr;
