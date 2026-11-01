@@ -19,7 +19,7 @@ const surahPending = new Map();
 /* ---------- pengaturan pengguna (disimpan di perangkat) ---------- */
 
 const PREF_KEY = 'qd-prefs-v1';
-const DEFAULTS = { theme: 'auto', dark: 'auto', arab: 28, tr: true, anim: true };
+const DEFAULTS = { theme: 'auto', dark: 'auto', arab: 28, tr: true, anim: true, autonext: true, autosurah: true, speed: 1, repeat: 'off' };
 const AR_MIN = 22, AR_MAX = 48;
 
 function loadPrefs() {
@@ -30,6 +30,10 @@ function loadPrefs() {
   if (!['auto', 'light', 'dark'].includes(out.dark)) out.dark = 'auto';
   out.arab = Math.min(AR_MAX, Math.max(AR_MIN, Number(out.arab) || DEFAULTS.arab));
   out.tr = out.tr !== false;
+  out.autonext = out.autonext !== false;
+  out.autosurah = out.autosurah !== false;
+  out.speed = [0.75, 1, 1.25, 1.5, 2].includes(Number(out.speed)) ? Number(out.speed) : 1;
+  if (!['off', 'x3', 'loop'].includes(out.repeat)) out.repeat = 'off';
   out.anim = ('anim' in p) ? p.anim !== false : !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   return out;
 }
@@ -116,7 +120,7 @@ function rowHTML(s, n) {
             <div class="item-title">${escapeHTML(latinName(s, n))}</div>
             <div class="item-after ar-text">${escapeHTML(arabicName(s))}</div>
           </div>
-          <div class="item-subtitle">${escapeHTML(translationOf(s))} · ${escapeHTML(countOf(s))} Ayat</div>
+          <div class="item-subtitle">${escapeHTML(translationOf(s))} · ${escapeHTML(countOf(s))} Ayat${txt(s.revelation) ? ' · ' + escapeHTML(txt(s.revelation)) : ''}</div>
         </div>
       </a>
     </li>`;
@@ -149,6 +153,73 @@ function getSurah(n) {
   return p;
 }
 
+/* ---------- tafsir (diunduh hanya saat tombol Tafsir ditekan) ---------- */
+
+const tafsirCache = new Map();
+function getTafsir(n) {
+  if (tafsirCache.has(n)) return Promise.resolve(tafsirCache.get(n));
+  return fetchJSON(`/data/tafsir/${n}.json`).then((arr) => {
+    if (!Array.isArray(arr)) throw new Error('Format tafsir tidak dikenal');
+    tafsirCache.set(n, arr);
+    return arr;
+  });
+}
+
+function paragraphs(str) {
+  return String(str || '').split(/\n{2,}/).map((t) => t.trim()).filter(Boolean)
+    .map((t) => `<p>${escapeHTML(t).replace(/\n/g, '<br>')}</p>`).join('');
+}
+
+function tafsirPopupHTML(n, idx, entry, t) {
+  const v = entry.verses[idx];
+  const src = (t && typeof t === 'object' && t.id) ? t.id : t;
+  const short = src && typeof src.short === 'string' ? src.short : '';
+  const long = src && typeof src.long === 'string' ? src.long : '';
+  const num = (v.number && typeof v.number === 'object') ? v.number.inSurah : (v.number ?? idx + 1);
+  const arabic = String(v.text?.arab ?? txt(v.text)).replace(/\ufeff/g, '');
+  return `
+    <div class="popup">
+      <div class="page">
+        <div class="navbar">
+          <div class="navbar-bg"></div>
+          <div class="navbar-inner">
+            <div class="title">${escapeHTML(latinName(entry.data, n))} : ${escapeHTML(num)}</div>
+            <div class="right"><a class="link popup-close">Tutup</a></div>
+          </div>
+        </div>
+        <div class="page-content">
+          <div class="block">
+            <div class="verse-ar ar-text">${escapeHTML(arabic)}</div>
+            <div class="verse-tr">${escapeHTML(v.translation?.id ?? txt(v.translation))}</div>
+          </div>
+          ${short ? `<div class="block-title">Ringkasan</div><div class="block">${paragraphs(short)}</div>` : ''}
+          ${long ? `<div class="block-title">Tafsir lengkap</div><div class="block">${paragraphs(long)}</div>` : ''}
+          ${!short && !long ? '<div class="block text-align-center">Tafsir ayat ini tidak tersedia.</div>' : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+async function openTafsir(n, idx) {
+  const entry = surahCache.get(n);
+  if (!entry || !app || !app.popup) return;
+  const pre = app.preloader;
+  if (pre) pre.show();
+  try {
+    const arr = await getTafsir(n);
+    app.popup.create({
+      content: tafsirPopupHTML(n, idx, entry, arr[idx]),
+      swipeToClose: true,
+      on: { closed(p) { p.destroy(); } }
+    }).open();
+  } catch (e) {
+    console.error(e);
+    audioToast('Tafsir gagal dimuat. Periksa koneksi internet.');
+  } finally {
+    if (pre) pre.hide();
+  }
+}
+
 /* ---------- tampilan ---------- */
 
 function renderSurahList(keyword = '') {
@@ -169,15 +240,403 @@ function renderSurahList(keyword = '') {
   if (html !== lastListHTML) { list.innerHTML = html; lastListHTML = html; }
 }
 
+
+/* ---------- audio per ayat ---------- */
+
+const ICON_PLAY = '<svg class="i-play" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+const svgI = (path) => `<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${path}</svg>`;
+const ICON_PREV = svgI('<path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/>');
+const ICON_NEXT = svgI('<path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>');
+const ICON_MORE = svgI('<circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>');
+const ICON_CLOSE = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const ICON_PAUSE = '<svg class="i-pause" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+
+function isSlowNet() {
+  const c = navigator.connection;
+  return !!(c && (c.saveData || /(^|-)[23]g$/.test(c.effectiveType || '')));
+}
+
+// Daftar alamat audio dari data ayat (primary, lalu secondary). Koneksi lambat: utamakan versi 64 kbps.
+function audioList(a) {
+  const au = a && a.audio;
+  const out = [];
+  const push = (u) => { if (typeof u === 'string' && u && !out.includes(u)) out.push(u); };
+  if (typeof au === 'string') push(au);
+  else if (au && typeof au === 'object') {
+    push(au.primary);
+    if (Array.isArray(au.secondary)) au.secondary.forEach(push);
+    Object.values(au).forEach((v) => { if (typeof v === 'string' && /^https?:/.test(v)) push(v); });
+  }
+  if (isSlowNet()) {
+    const i = out.findIndex((u) => /\/64\//.test(u));
+    if (i > 0) out.unshift(out.splice(i, 1)[0]);
+  }
+  return out;
+}
+const audioUrl = (a) => audioList(a)[0] || '';
+
+const player = new Audio();
+player.preload = 'none'; // tidak mengunduh apa pun sebelum tombol ditekan
+const audioState = { page: null, entry: null, n: 0, idx: -1, url: '', list: [], k: 0, rep: 0 };
+let preAudio = null;
+let mediaSessionReady = false;
+let pendingPlay = null; // dipakai saat lanjut otomatis ke surah berikutnya
+let sleepTimer = null;
+let sleepMin = 0;
+
+const verseNo = (v, i) => ((v && v.number && typeof v.number === 'object') ? v.number.inSurah : (v && v.number)) ?? i + 1;
+
+function fmt(sec) {
+  if (!isFinite(sec) || sec < 0) return '0:00';
+  const m = Math.floor(sec / 60), r = Math.floor(sec % 60);
+  return m + ':' + String(r).padStart(2, '0');
+}
+
+function setCurrent(idx, playing) {
+  const el = audioState.page && audioState.page.el;
+  if (!el) return;
+  el.querySelectorAll('.verse-card.current, .verse-card.playing').forEach((c) => c.classList.remove('current', 'playing'));
+  if (idx < 0) return;
+  const card = el.querySelector(`.verse-card[data-i="${idx}"]`);
+  if (card) { card.classList.add('current'); if (playing) card.classList.add('playing'); }
+}
+
+function audioToast(text) {
+  try { if (app && app.toast) app.toast.create({ text, position: 'center', closeTimeout: 2500 }).open(); } catch (e) { /* abaikan */ }
+}
+
+function applySpeed() {
+  try { player.defaultPlaybackRate = prefs.speed; player.playbackRate = prefs.speed; } catch (e) { /* abaikan */ }
+}
+
+/* ---------- bilah pemutar (mini player) ---------- */
+
+function barEls() {
+  const el = audioState.page && audioState.page.el;
+  const bar = el && el.querySelector('.player-bar');
+  if (!bar) return null;
+  return {
+    bar,
+    pc: el.querySelector('.page-content'),
+    seek: bar.querySelector('.pb-seek'),
+    title: bar.querySelector('.pb-title'),
+    time: bar.querySelector('.pb-time')
+  };
+}
+
+function hideBar(b) {
+  if (!b) return;
+  b.bar.classList.remove('show', 'is-playing');
+  if (b.pc) b.pc.classList.remove('has-player');
+}
+
+function infoSuffix() {
+  const parts = [];
+  if (prefs.speed !== 1) parts.push(prefs.speed + '×');
+  if (prefs.repeat === 'x3') parts.push(`ulang ${Math.min(audioState.rep + 1, 3)}/3`);
+  if (prefs.repeat === 'loop') parts.push('ulang ∞');
+  if (sleepMin) parts.push(`timer ${sleepMin} mnt`);
+  return parts.length ? ' · ' + parts.join(' · ') : '';
+}
+
+function updateTime() {
+  const b = barEls();
+  if (!b || !audioState.url) return;
+  const d = player.duration;
+  const ct = player.currentTime || 0;
+  if (b.seek && b.seek.dataset.drag !== '1') b.seek.value = (d && isFinite(d)) ? Math.round(ct / d * 1000) : 0;
+  if (b.time) b.time.textContent = `${fmt(ct)} / ${fmt(d)}${infoSuffix()}`;
+}
+
+function updateBar() {
+  const b = barEls();
+  if (!b) return;
+  const active = audioState.idx >= 0 && !!audioState.url;
+  b.bar.classList.toggle('show', active);
+  if (b.pc) b.pc.classList.toggle('has-player', active);
+  if (!active) return;
+  b.bar.classList.toggle('is-playing', !player.paused);
+  const v = audioState.entry.verses[audioState.idx];
+  if (b.title) b.title.textContent = `${latinName(audioState.entry.data, audioState.n)} · Ayat ${verseNo(v, audioState.idx)}`;
+  updateTime();
+}
+
+function stopAudio() {
+  clearTimeout(sleepTimer);
+  sleepMin = 0;
+  const b = barEls();
+  player.pause();
+  setCurrent(-1, false);
+  hideBar(b);
+  audioState.url = '';
+  audioState.list = [];
+  audioState.k = 0;
+  audioState.rep = 0;
+  audioState.idx = -1;
+  audioState.page = null;
+  audioState.entry = null;
+  player.removeAttribute('src');
+  try { player.load(); } catch (e) { /* abaikan */ }
+  if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = 'none'; } catch (e) { /* abaikan */ } }
+}
+
+function setSleep(min) {
+  clearTimeout(sleepTimer);
+  sleepMin = min;
+  if (min > 0) {
+    sleepTimer = setTimeout(() => {
+      sleepMin = 0;
+      if (audioState.url) { stopAudio(); audioToast('Timer selesai, audio dihentikan.'); }
+    }, min * 60000);
+  }
+  updateTime();
+}
+
+/* ---------- media session (kontrol layar kunci) ---------- */
+
+function setupMediaSession() {
+  if (mediaSessionReady || !('mediaSession' in navigator)) return;
+  mediaSessionReady = true;
+  const set = (name, fn) => { try { navigator.mediaSession.setActionHandler(name, fn); } catch (e) { /* tidak didukung */ } };
+  set('play', () => player.play().catch(playFail));
+  set('pause', () => player.pause());
+  set('nexttrack', () => { if (audioState.entry) advance(); });
+  set('previoustrack', () => { if (audioState.entry) prevVerse(); });
+}
+
+function updateMediaSession(idx) {
+  if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
+  try {
+    const s = audioState.entry.data;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: `${latinName(s, audioState.n)} - Ayat ${verseNo(audioState.entry.verses[idx], idx)}`,
+      artist: 'Murottal',
+      album: APP_TITLE
+    });
+    setupMediaSession();
+  } catch (e) { /* abaikan */ }
+}
+
+function setPlaybackState(state) {
+  if ('mediaSession' in navigator) { try { navigator.mediaSession.playbackState = state; } catch (e) { /* abaikan */ } }
+}
+
+/* ---------- pemutaran ---------- */
+
+function playFail(e) {
+  if (e && e.name === 'AbortError') return; // terjadi saat berpindah ayat cepat, bukan kesalahan
+  onAudioError();
+}
+
+function onAudioError() {
+  if (!audioState.url) return;
+  if (audioState.k + 1 < audioState.list.length) { // coba server audio cadangan
+    audioState.k += 1;
+    audioState.url = audioState.list[audioState.k];
+    player.src = audioState.url;
+    applySpeed();
+    const pr = player.play();
+    if (pr && pr.catch) pr.catch(() => {});
+    return;
+  }
+  setCurrent(audioState.idx, false);
+  updateBar();
+  audioToast('Audio gagal diputar. Periksa koneksi internet.');
+}
+
+function playVerse(idx) {
+  const { page, entry } = audioState;
+  if (!page || !entry) return;
+  if (idx < 0) idx = 0;
+  if (idx >= entry.verses.length) { nextSurahOrStop(); return; }
+  const list = audioList(entry.verses[idx]);
+  const url = list[0];
+  if (!url) {
+    if (prefs.autonext && idx + 1 < entry.verses.length) { audioState.idx = idx; playVerse(idx + 1); } else audioToast('Audio ayat ini tidak tersedia.');
+    return;
+  }
+  if (page.el.__renderUntil) page.el.__renderUntil(idx);
+  audioState.idx = idx;
+  audioState.rep = 0;
+  if (audioState.url !== url) { audioState.list = list; audioState.k = 0; audioState.url = url; player.src = url; }
+  applySpeed();
+  const pr = player.play();
+  if (pr && pr.catch) pr.catch(playFail);
+  setCurrent(idx, true);
+  updateBar();
+  const card = page.el.querySelector(`.verse-card[data-i="${idx}"]`);
+  if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  updateMediaSession(idx);
+
+  // Siapkan ayat berikutnya hanya bila koneksi bukan 2G/hemat data.
+  const c = navigator.connection;
+  const slow = c && (c.saveData || /(^|-)2g$/.test(c.effectiveType || ''));
+  const nu = !slow && prefs.autonext ? audioUrl(entry.verses[idx + 1]) : '';
+  if (nu) { preAudio = new Audio(); preAudio.preload = 'auto'; preAudio.src = nu; }
+}
+
+function advance() {
+  const next = audioState.idx + 1;
+  if (next < audioState.entry.verses.length) playVerse(next); else nextSurahOrStop();
+}
+
+function prevVerse() {
+  if (player.currentTime > 3 || audioState.idx <= 0) {
+    player.currentTime = 0;
+    const pr = player.play();
+    if (pr && pr.catch) pr.catch(playFail);
+  } else playVerse(audioState.idx - 1);
+}
+
+// Akhir surah: lanjut ke surah berikutnya (bila diaktifkan), jika tidak berhenti.
+function nextSurahOrStop() {
+  const n = audioState.n;
+  if (prefs.autosurah && n < TOTAL && app && app.views && app.views.main) {
+    pendingPlay = { n: n + 1, t: Date.now() };
+    setCurrent(-1, false);
+    hideBar(barEls());
+    app.views.main.router.navigate(`/surah/${n + 1}/`);
+    return;
+  }
+  stopAudio();
+}
+
+player.addEventListener('ended', () => {
+  if (!audioState.url) return;
+  const mode = prefs.repeat;
+  if (mode === 'loop' || (mode === 'x3' && audioState.rep + 1 < 3)) {
+    audioState.rep += 1;
+    player.currentTime = 0;
+    const pr = player.play();
+    if (pr && pr.catch) pr.catch(playFail);
+    updateTime();
+    return;
+  }
+  audioState.rep = 0;
+  if (prefs.autonext) advance(); else { setCurrent(audioState.idx, false); updateBar(); }
+});
+player.addEventListener('pause', () => {
+  if (!player.ended && audioState.url) { setCurrent(audioState.idx, false); updateBar(); setPlaybackState('paused'); }
+});
+player.addEventListener('play', () => {
+  if (audioState.url) { setCurrent(audioState.idx, true); updateBar(); setPlaybackState('playing'); }
+});
+player.addEventListener('timeupdate', updateTime);
+player.addEventListener('loadedmetadata', updateTime);
+player.addEventListener('error', onAudioError);
+
+/* ---------- opsi audio (ulang, kecepatan, timer) ---------- */
+
+function audioOptionsHTML() {
+  const radios = (name, items, cur) => items.map(([v, l]) => radioItem(name, v, l, String(cur))).join('');
+  return `
+    <div class="popup">
+      <div class="page">
+        <div class="navbar">
+          <div class="navbar-bg"></div>
+          <div class="navbar-inner">
+            <div class="title">Opsi audio</div>
+            <div class="right"><a class="link popup-close">Selesai</a></div>
+          </div>
+        </div>
+        <div class="page-content">
+          <div class="block-title">Ulangi ayat</div>
+          <div class="list inset"><ul>${radios('rep', [['off', 'Tidak diulang'], ['x3', 'Ulangi 3×'], ['loop', 'Ulangi terus']], prefs.repeat)}</ul></div>
+          <div class="block-title">Kecepatan</div>
+          <div class="list inset"><ul>${radios('spd', [['0.75', '0.75×'], ['1', 'Normal (1×)'], ['1.25', '1.25×'], ['1.5', '1.5×'], ['2', '2×']], prefs.speed)}</ul></div>
+          <div class="block-title">Matikan audio otomatis</div>
+          <div class="list inset"><ul>${radios('slp', [['0', 'Tidak'], ['15', '15 menit'], ['30', '30 menit'], ['60', '60 menit']], sleepMin)}</ul></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function openAudioOptions() {
+  if (!app || !app.popup) return;
+  app.popup.create({
+    content: audioOptionsHTML(),
+    swipeToClose: true,
+    on: {
+      opened(p) {
+        const on = (name, fn) => p.el.querySelectorAll(`input[name="${name}"]`).forEach((r) => r.addEventListener('change', () => { if (r.checked) fn(r.value); }));
+        on('rep', (v) => { prefs.repeat = v; audioState.rep = 0; savePrefs(); updateTime(); });
+        on('spd', (v) => { prefs.speed = Number(v); savePrefs(); applySpeed(); updateTime(); });
+        on('slp', (v) => setSleep(Number(v)));
+      },
+      closed(p) { p.destroy(); }
+    }
+  }).open();
+}
+
+/* ---------- tombol di halaman surah ---------- */
+
+function bindAudio(page, n, entry) {
+  const el = page.el;
+  const ensure = () => {
+    if (audioState.page && audioState.page.el !== el) stopAudio();
+    if (!audioState.page) Object.assign(audioState, { page, entry, n, idx: -1, url: '', list: [], k: 0, rep: 0 });
+  };
+
+  const seek = el.querySelector('.pb-seek');
+  if (seek) {
+    seek.addEventListener('input', () => {
+      seek.dataset.drag = '1';
+      const d = player.duration;
+      if (d && isFinite(d)) player.currentTime = d * seek.value / 1000;
+    });
+    seek.addEventListener('change', () => { seek.dataset.drag = '0'; });
+  }
+
+  el.addEventListener('click', (ev) => {
+    const t = ev.target;
+    if (!t || !t.closest) return;
+
+    const tb = t.closest('.tafsir-btn');
+    if (tb) { ev.preventDefault(); openTafsir(n, Number(tb.dataset.i)); return; }
+
+    const pb = t.closest('.pb-btn');
+    if (pb) {
+      ev.preventDefault();
+      if (!audioState.url || audioState.page.el !== el) return;
+      if (pb.classList.contains('pb-toggle')) {
+        if (player.paused) { const pr = player.play(); if (pr && pr.catch) pr.catch(playFail); } else player.pause();
+      } else if (pb.classList.contains('pb-prev')) prevVerse();
+      else if (pb.classList.contains('pb-next')) advance();
+      else if (pb.classList.contains('pb-opts')) openAudioOptions();
+      else if (pb.classList.contains('pb-close')) stopAudio();
+      return;
+    }
+
+    const btn = t.closest('.audio-btn');
+    const all = t.closest('.play-all');
+    if (!btn && !all) return;
+    ev.preventDefault();
+    ensure();
+    const idx = btn ? Number(btn.dataset.i) : 0;
+    if (idx === audioState.idx && audioState.url) {
+      if (player.paused) { const pr = player.play(); if (pr && pr.catch) pr.catch(playFail); } else player.pause();
+      return;
+    }
+    playVerse(idx);
+  });
+}
+
 function verseHTML(a, i) {
   const num = (a.number && typeof a.number === 'object') ? a.number.inSurah : a.number;
   const number = num ?? i + 1;
-  const arabic = a.text?.arab ?? txt(a.text);
+  const arabic = String(a.text?.arab ?? txt(a.text)).replace(/\ufeff/g, '');
   const translation = a.translation?.id ?? txt(a.translation);
+  const hasAudio = !!audioUrl(a);
   return `
-    <div class="card card-outline verse-card">
+    <div class="card card-outline verse-card" data-i="${i}">
       <div class="card-content card-content-padding">
-        <span class="badge color-green">Ayat ${escapeHTML(number)}</span>
+        <div class="display-flex justify-content-space-between align-items-center">
+          <span class="badge color-green">Ayat ${escapeHTML(number)}</span>
+          <div class="display-flex align-items-center" style="gap:8px">
+            <a class="button button-small button-round button-outline tafsir-btn" role="button" data-i="${i}" aria-label="Tafsir ayat ${escapeHTML(number)}">Tafsir</a>
+            ${hasAudio ? `<a class="button button-small button-round button-outline audio-btn" role="button" data-i="${i}" aria-label="Putar ayat ${escapeHTML(number)}">${ICON_PLAY}${ICON_PAUSE}</a>` : ''}
+          </div>
+        </div>
         <div class="verse-ar ar-text">${escapeHTML(arabic)}</div>
         <div class="verse-tr">${escapeHTML(translation)}</div>
       </div>
@@ -215,6 +674,9 @@ function surahPage(n, entry, direct) {
   const name = latinName(s, n);
   const first = verses.slice(0, CHUNK).map(verseHTML).join('');
   const more = verses.length > CHUNK;
+  const hasAudioAny = verses.some((a) => audioUrl(a));
+  const hasPB = ('preBismillah' in s) ? !!s.preBismillah : (n !== 1 && n !== 9);
+  const pbText = String(s.preBismillah?.text?.arab || 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ').replace(/\ufeff/g, '');
 
   return `
     <div class="page" data-name="surah" data-title="${escapeHTML(name)} - ${escapeHTML(APP_TITLE)}">
@@ -225,6 +687,18 @@ function surahPage(n, entry, direct) {
           ${n < TOTAL ? `<a href="/surah/${n + 1}/" class="link">Berikutnya</a>` : '<a class="link disabled">Berikutnya</a>'}
         </div>
       </div>
+      ${hasAudioAny ? `
+      <div class="player-bar">
+        <input type="range" class="pb-seek" min="0" max="1000" value="0" aria-label="Posisi audio">
+        <div class="pb-row">
+          <a class="pb-btn pb-toggle" role="button" aria-label="Putar atau jeda">${ICON_PLAY.replace('width="18" height="18"', 'width="22" height="22"')}${ICON_PAUSE.replace('width="18" height="18"', 'width="22" height="22"')}</a>
+          <div class="pb-info"><div class="pb-title"></div><div class="pb-time">0:00 / 0:00</div></div>
+          <a class="pb-btn pb-prev" role="button" aria-label="Ayat sebelumnya">${ICON_PREV}</a>
+          <a class="pb-btn pb-next" role="button" aria-label="Ayat berikutnya">${ICON_NEXT}</a>
+          <a class="pb-btn pb-opts" role="button" aria-label="Opsi audio">${ICON_MORE}</a>
+          <a class="pb-btn pb-close" role="button" aria-label="Tutup pemutar">${ICON_CLOSE}</a>
+        </div>
+      </div>` : ''}
       <div class="page-content">
         <div class="block">
           <div class="card hero" style="margin:0">
@@ -233,13 +707,12 @@ function surahPage(n, entry, direct) {
               <h2 style="margin:4px 0">${escapeHTML(name)}</h2>
               <p style="margin:4px 0">${escapeHTML(translationOf(s))}</p>
               <p style="margin:4px 0">${verses.length} Ayat</p>
+              ${hasAudioAny ? `<div class="margin-top-half"><a class="button button-small button-fill btn-gold play-all" role="button" style="display:inline-flex;align-items:center;gap:6px;padding:0 18px">${ICON_PLAY} Putar Surah</a></div>` : ''}
             </div>
           </div>
         </div>
 
-        ${n !== 1 && n !== 9
-          ? '<div class="block text-align-center bismillah ar-text">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>'
-          : ''}
+        ${hasPB ? `<div class="block text-align-center bismillah ar-text">${escapeHTML(pbText)}</div>` : ''}
 
         <div class="verses">${first || '<div class="block">Ayat belum tersedia.</div>'}</div>
         ${more ? '<div class="verses-sentinel block text-align-center text-color-gray">Memuat ayat...</div>' : ''}
@@ -311,6 +784,8 @@ function settingsPage(direct) {
             </div>
           </li>
           ${toggleItem('opt-tr', 'Tampilkan terjemahan', prefs.tr)}
+          ${toggleItem('opt-autonext', 'Putar ayat berikutnya otomatis', prefs.autonext)}
+          ${toggleItem('opt-autosurah', 'Lanjut ke surah berikutnya otomatis', prefs.autosurah)}
           ${toggleItem('opt-anim', 'Animasi perpindahan halaman', prefs.anim)}
         </ul></div>
         <div class="block-footer">Matikan animasi bila terasa berat di HP lama.</div>
@@ -359,26 +834,44 @@ async function initHome(e, page) {
 function initSurahPage(page) {
   const n = Number(page.route.params.number);
   const entry = surahCache.get(n);
+  if (!entry) return;
+  const box = page.el.querySelector('.verses');
   const sentinel = page.el.querySelector('.verses-sentinel');
+  const root = page.el.querySelector('.page-content');
+  let next = CHUNK;
+  let io = null;
 
-  if (entry && sentinel && 'IntersectionObserver' in window) {
-    const box = page.el.querySelector('.verses');
-    const root = page.el.querySelector('.page-content');
-    let next = CHUNK;
-    const io = new IntersectionObserver((items) => {
-      if (!items[0].isIntersecting) return;
-      box.insertAdjacentHTML('beforeend',
-        entry.verses.slice(next, next + CHUNK).map((a, i) => verseHTML(a, next + i)).join(''));
-      next += CHUNK;
-      if (next >= entry.verses.length) { io.disconnect(); sentinel.remove(); return; }
-      io.unobserve(sentinel); io.observe(sentinel);
-    }, { root, rootMargin: '800px 0px' });
-    io.observe(sentinel);
-    page.el.__io = io;
-  } else if (entry && sentinel) {
-    page.el.querySelector('.verses').insertAdjacentHTML('beforeend',
-      entry.verses.slice(CHUNK).map((a, i) => verseHTML(a, CHUNK + i)).join(''));
-    sentinel.remove();
+  const finish = () => { if (io) io.disconnect(); if (sentinel) sentinel.remove(); };
+  const renderChunk = () => {
+    box.insertAdjacentHTML('beforeend',
+      entry.verses.slice(next, next + CHUNK).map((a, i) => verseHTML(a, next + i)).join(''));
+    next += CHUNK;
+    if (next >= entry.verses.length) finish();
+  };
+  // Dipakai pemutar audio agar ayat yang sedang diputar selalu sudah ada di layar.
+  page.el.__renderUntil = (idx) => { while (next <= idx && next < entry.verses.length) renderChunk(); };
+
+  if (sentinel) {
+    if ('IntersectionObserver' in window) {
+      io = new IntersectionObserver((items) => {
+        if (!items[0].isIntersecting) return;
+        renderChunk();
+        if (sentinel.isConnected) { io.unobserve(sentinel); io.observe(sentinel); }
+      }, { root, rootMargin: '800px 0px' });
+      io.observe(sentinel);
+      page.el.__io = io;
+    } else {
+      page.el.__renderUntil(entry.verses.length);
+    }
+  }
+
+  bindAudio(page, n, entry);
+
+  // Lanjut otomatis dari akhir surah sebelumnya.
+  if (pendingPlay && pendingPlay.n === n && Date.now() - pendingPlay.t < 30000) {
+    pendingPlay = null;
+    Object.assign(audioState, { page, entry, n, idx: -1, url: '', list: [], k: 0, rep: 0 });
+    playVerse(0);
   }
 
   const c = navigator.connection;
@@ -422,6 +915,12 @@ function initSettings(page) {
 
   const tr = el.querySelector('#opt-tr');
   if (tr) tr.addEventListener('change', () => { prefs.tr = tr.checked; savePrefs(); applyAppearance(); });
+
+  const autoNext = el.querySelector('#opt-autonext');
+  if (autoNext) autoNext.addEventListener('change', () => { prefs.autonext = autoNext.checked; savePrefs(); });
+
+  const autoSurah = el.querySelector('#opt-autosurah');
+  if (autoSurah) autoSurah.addEventListener('change', () => { prefs.autosurah = autoSurah.checked; savePrefs(); });
 
   const anim = el.querySelector('#opt-anim');
   if (anim) anim.addEventListener('change', () => {
@@ -483,6 +982,7 @@ function initApp() {
         async: surahRoute,
         on: {
           pageInit: (e, page) => initSurahPage(page),
+          pageBeforeOut: (e, page) => { if (audioState.page && audioState.page.el === page.el && !pendingPlay) stopAudio(); },
           pageBeforeRemove: (e, page) => { if (page.el.__io) page.el.__io.disconnect(); }
         }
       },
