@@ -4,7 +4,10 @@ const LIST_URL = '/data/surah-list.json';
 const surahUrl = (n) => `/data/surah/${n}.json`;
 const TOTAL = 114;
 const CHUNK = 20;
-const APP_TITLE = "Al-Qur'an Digital";
+const metaSite = typeof document !== 'undefined' && document.querySelector ? document.querySelector('meta[property="og:site_name"]') : null;
+const APP_TITLE = (metaSite && metaSite.content) || 'AyatNusa';
+const HOME_TITLE = (typeof document !== 'undefined' && document.title) || APP_TITLE;
+const surahTitle = (name) => `Surah ${name} - Arti, Terjemahan & Audio | ${APP_TITLE}`;
 const GEAR = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
 
 let app;
@@ -686,7 +689,7 @@ function surahPage(n, entry, direct) {
   const pbText = String(s.preBismillah?.text?.arab || 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ').replace(/\ufeff/g, '');
 
   return `
-    <div class="page" data-name="surah" data-title="${escapeHTML(name)} - ${escapeHTML(APP_TITLE)}">
+    <div class="page" data-name="surah" data-title="${escapeHTML(surahTitle(name))}">
       ${navbarHTML(name, direct, true)}
       <div class="toolbar toolbar-bottom">
         <div class="toolbar-inner">
@@ -752,7 +755,7 @@ function toggleItem(id, label, on) {
 
 function settingsPage(direct) {
   return `
-    <div class="page" data-name="settings" data-title="Pengaturan - ${escapeHTML(APP_TITLE)}">
+    <div class="page" data-name="settings" data-title="Pengaturan | ${escapeHTML(APP_TITLE)}">
       ${navbarHTML('Pengaturan', direct, false)}
       <div class="page-content">
         <div class="block-title">Gaya antarmuka</div>
@@ -1006,11 +1009,13 @@ function initApp() {
   });
 
   app.on('pageBeforeIn', (page) => {
-    document.title = page.el.dataset.title || APP_TITLE;
+    document.title = page.el.dataset.title || HOME_TITLE;
   });
   app.on('pageInit', () => {
     const splash = document.getElementById('splash');
     if (splash) splash.remove();
+    const seo = document.getElementById('seo'); // salinan teks untuk mesin pencari, tidak dibutuhkan lagi
+    if (seo) seo.remove();
   });
 
   app.init();
