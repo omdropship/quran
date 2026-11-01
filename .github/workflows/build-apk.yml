@@ -1,14 +1,15 @@
+
 name: Build APK Android
 
 on:
   workflow_dispatch:
     inputs:
       include_tafsir:
-        description: "Sertakan tafsir di dalam APK (APK lebih besar, tafsir bisa dibaca offline)"
+        description: "Sertakan tafsir offline di APK"
         type: boolean
         default: false
       site_url:
-        description: "Alamat situs Vercel untuk tafsir online bila tafsir tidak disertakan (contoh https://nama.vercel.app)"
+        description: "URL website Vercel untuk tafsir online"
         required: false
         default: ""
 
@@ -18,19 +19,23 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Ambil kode repository
+        uses: actions/checkout@v4
+
+      - name: Siapkan Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - uses: actions/setup-java@v4
+      - name: Siapkan Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Buat data (daftar surah, surah, tafsir)
+      - name: Buat data Al-Quran
         run: node scripts/build-data.js
 
       - name: Siapkan isi aplikasi
@@ -40,69 +45,89 @@ jobs:
         run: |
           set -e
           WS="$GITHUB_WORKSPACE"
+
           mkdir -p "$WS/cap/www/data" "$WS/cap/www/lib"
+
           cp "$WS/website/index.html" "$WS/website/app.js" "$WS/cap/www/"
           cp "$WS/website/data/surah-list.json" "$WS/cap/www/data/"
           cp -r "$WS/website/data/surah" "$WS/cap/www/data/surah"
-          if [ "$INCLUDE_TAFSIR" = "true" ]; then cp -r "$WS/website/data/tafsir" "$WS/cap/www/data/tafsir"; fi
 
-          # Framework7 8.3.0 ikut dibungkus ke dalam aplikasi agar bisa dibuka tanpa internet
-          mkdir -p /tmp/f7 && cd /tmp/f7
+          if [ "$INCLUDE_TAFSIR" = "true" ]; then
+            cp -r "$WS/website/data/tafsir" "$WS/cap/www/data/tafsir"
+          fi
+
+          mkdir -p /tmp/f7
+          cd /tmp/f7
           npm init -y > /dev/null
-          npm i framework7@8.3.0 > /dev/null
-          JS=$(find node_modules/framework7 -maxdepth 2 -name 'framework7-bundle.min.js' | head -1)
-          CSS=$(find node_modules/framework7 -maxdepth 2 -name 'framework7-bundle.min.css' | head -1)
-          if [ -z "$JS" ] || [ -z "$CSS" ]; then echo "File Framework7 tidak ditemukan"; exit 1; fi
-          cp "$JS" "$WS/cap/www/lib/framework7-bundle.min.js"
-          cp "$CSS" "$WS/cap/www/lib/framework7-bundle.min.css"
+          npm i framework7@8.3.0
+
+          JS=$(find node_modules/framework7 -name 'framework7-bundle.min.js' | head -1)
+          CSS=$(find node_modules/framework7 -name 'framework7-bundle.min.css' | head -1)
+
+          test -n "$JS" || { echo "Framework7 JS tidak ditemukan"; exit 1; }
+          test -n "$CSS" || { echo "Framework7 CSS tidak ditemukan"; exit 1; }
+
+          cp "$JS" "$WS/cap/www/lib/"
+          cp "$CSS" "$WS/cap/www/lib/"
 
           cd "$WS/cap/www"
+
           sed -i 's#https://cdn.jsdelivr.net/npm/framework7@8.3.0/framework7-bundle.min.js#/lib/framework7-bundle.min.js#; s#https://cdn.jsdelivr.net/npm/framework7@8.3.0/framework7-bundle.min.css#/lib/framework7-bundle.min.css#; /rel="preconnect"/d' index.html
-          if grep -q jsdelivr index.html; then echo "Masih ada alamat CDN di index.html"; exit 1; fi
+
+          if grep -q 'jsdelivr' index.html; then
+            echo "Masih ada CDN Framework7"
+            exit 1
+          fi
 
           if [ -n "$SITE_URL" ]; then
-            case "$SITE_URL" in
-              https://*) ;;
-              *) echo "site_url harus diawali https://"; exit 1 ;;
-            esac
-            SITE_URL="${SITE_URL%/}"
-            sed -i "s#</head>#<script>window.QURAN_REMOTE=\"${SITE_URL}\";</script></head>#" index.html
+            node -e 'const u=new URL(process.argv[1]); if(u.protocol!=="https:") process.exit(1)' "$SITE_URL"
+            export SITE_URL
+            node -e 'const fs=require("fs"); const p="index.html"; const s=fs.readFileSync(p,"utf8"); fs.writeFileSync(p,s.replace("</head>", `<script>window.QURAN_REMOTE=${JSON.stringify(process.env.SITE_URL.replace(/\/+$/, ""))};</script></head>`))'
           fi
-          echo "Isi aplikasi:"; du -sh "$WS/cap/www"
 
-      - name: Buat proyek Capacitor dan bangun APK
+          du -sh "$WS/cap/www"
+
+      - name: Buat APK Android
         working-directory: cap
         run: |
           set -e
+
           npm init -y > /dev/null
-          npm i @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 > /dev/null
+          npm i @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+
           cat > capacitor.config.json <<'JSON'
           {
             "appId": "com.omdropship.quran",
             "appName": "Al-Quran Digital",
             "webDir": "www",
-            "server": { "androidScheme": "https" }
+            "server": {
+              "androidScheme": "https"
+            }
           }
           JSON
+
           npx cap add android
           npx cap sync android
+
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Simpan APK sebagai artifact
+      - name: Simpan APK
         uses: actions/upload-artifact@v4
         with:
           name: Al-Quran-Digital-APK
           path: cap/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
 
-      - name: Buat rilis agar APK mudah diunduh dari HP
+      - name: Buat GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -e
           cp cap/android/app/build/outputs/apk/debug/app-debug.apk Al-Quran-Digital.apk
-          ls -lh Al-Quran-Digital.apk
+
           gh release create "apk-${{ github.run_number }}" Al-Quran-Digital.apk \
-            --title "APK build ${{ github.run_number }}" \
-            --notes "APK untuk dipasang langsung di Android. Daftar surah dan ayat bisa dibaca tanpa internet. Audio butuh internet." \
+            --title "Al-Quran Digital APK ${{ github.run_number }}" \
+            --notes "APK Al-Quran Digital untuk Android." \
             --prerelease
