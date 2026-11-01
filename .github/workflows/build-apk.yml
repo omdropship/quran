@@ -1,133 +1,149 @@
 
-name: Build APK Android
+name: Build AyatNusa Android
 
 on:
   workflow_dispatch:
     inputs:
       include_tafsir:
-        description: "Sertakan tafsir offline di APK"
+        description: "Sertakan tafsir offline"
+        required: true
         type: boolean
         default: false
       site_url:
-        description: "URL website Vercel untuk tafsir online"
-        required: false
-        default: ""
+        description: "Website AyatNusa"
+        required: true
+        type: string
+        default: "https://quran254.vercel.app"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apk:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Ambil kode repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Siapkan Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Siapkan Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Buat data Al-Quran
+      - name: Build Quran data
         run: node scripts/build-data.js
 
-      - name: Siapkan isi aplikasi
+      - name: Prepare website
+        run: |
+          mkdir -p cap/www/data/surah
+          mkdir -p cap/www/data/tafsir
+          mkdir -p cap/www/lib
+
+          cp website/index.html cap/www/
+          cp website/app.js cap/www/
+          cp website/data/surah-list.json cap/www/data/
+          cp website/data/surah/*.json cap/www/data/surah/
+
+          if [ "${{ inputs.include_tafsir }}" = "true" ]; then
+            cp website/data/tafsir/*.json cap/www/data/tafsir/
+          fi
+
+      - name: Install Framework7
+        run: |
+          cd cap
+          npm init -y
+          npm install framework7@8.3.0
+          cp node_modules/framework7/framework7-bundle.min.js www/lib/
+          cp node_modules/framework7/framework7-bundle.min.css www/lib/
+
+      - name: Configure website
         env:
-          INCLUDE_TAFSIR: ${{ inputs.include_tafsir }}
           SITE_URL: ${{ inputs.site_url }}
         run: |
-          set -e
-          WS="$GITHUB_WORKSPACE"
+          cd cap/www
 
-          mkdir -p "$WS/cap/www/data" "$WS/cap/www/lib"
+          node -e '
+            const fs = require("fs");
+            const u = new URL(process.env.SITE_URL);
+            if (u.protocol !== "https:") throw new Error("Website harus HTTPS");
 
-          cp "$WS/website/index.html" "$WS/website/app.js" "$WS/cap/www/"
-          cp "$WS/website/data/surah-list.json" "$WS/cap/www/data/"
-          cp -r "$WS/website/data/surah" "$WS/cap/www/data/surah"
+            let html = fs.readFileSync("index.html", "utf8");
 
-          if [ "$INCLUDE_TAFSIR" = "true" ]; then
-            cp -r "$WS/website/data/tafsir" "$WS/cap/www/data/tafsir"
-          fi
+            html = html.replace(
+              "</head>",
+              "<script>window.QURAN_REMOTE = " +
+              JSON.stringify(u.origin) +
+              ";</script></head>"
+            );
 
-          mkdir -p /tmp/f7
-          cd /tmp/f7
-          npm init -y > /dev/null
-          npm i framework7@8.3.0
+            fs.writeFileSync("index.html", html);
+          '
 
-          JS=$(find node_modules/framework7 -name 'framework7-bundle.min.js' | head -1)
-          CSS=$(find node_modules/framework7 -name 'framework7-bundle.min.css' | head -1)
-
-          test -n "$JS" || { echo "Framework7 JS tidak ditemukan"; exit 1; }
-          test -n "$CSS" || { echo "Framework7 CSS tidak ditemukan"; exit 1; }
-
-          cp "$JS" "$WS/cap/www/lib/"
-          cp "$CSS" "$WS/cap/www/lib/"
-
-          cd "$WS/cap/www"
-
-          sed -i 's#https://cdn.jsdelivr.net/npm/framework7@8.3.0/framework7-bundle.min.js#/lib/framework7-bundle.min.js#; s#https://cdn.jsdelivr.net/npm/framework7@8.3.0/framework7-bundle.min.css#/lib/framework7-bundle.min.css#; /rel="preconnect"/d' index.html
-
-          if grep -q 'jsdelivr' index.html; then
-            echo "Masih ada CDN Framework7"
-            exit 1
-          fi
-
-          if [ -n "$SITE_URL" ]; then
-            node -e 'const u=new URL(process.argv[1]); if(u.protocol!=="https:") process.exit(1)' "$SITE_URL"
-            export SITE_URL
-            node -e 'const fs=require("fs"); const p="index.html"; const s=fs.readFileSync(p,"utf8"); fs.writeFileSync(p,s.replace("</head>", `<script>window.QURAN_REMOTE=${JSON.stringify(process.env.SITE_URL.replace(/\/+$/, ""))};</script></head>`))'
-          fi
-
-          du -sh "$WS/cap/www"
-
-      - name: Buat APK Android
-        working-directory: cap
+      - name: Create Capacitor project
         run: |
-          set -e
+          cd cap
 
-          npm init -y > /dev/null
-          npm i @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          npm install @capacitor/core@6.1.2 \
+            @capacitor/cli@6.1.2 \
+            @capacitor/android@6.1.2
 
-          cat > capacitor.config.json <<'JSON'
-          {
-            "appId": "com.omdropship.quran",
-            "appName": "Al-Quran Digital",
-            "webDir": "www",
-            "server": {
-              "androidScheme": "https"
-            }
-          }
-          JSON
-
+          npx cap init AyatNusa com.omdropship.quran --web-dir www
           npx cap add android
+
+      - name: Prepare app icon and splash
+        run: |
+          cd cap
+
+          npm install --save-dev @capacitor/assets@3 sharp
+
+          mkdir -p assets
+
+          cp ../assets/icon.png assets/icon.png
+
+          node -e '
+            const sharp = require("sharp");
+            sharp("../assets/splash.png")
+              .resize(2732, 2732, {
+                fit: "contain",
+                background: "#064E3B"
+              })
+              .png()
+              .toFile("assets/splash.png");
+          '
+
+          npx capacitor-assets generate --android
+
+      - name: Set app name
+        run: |
+          sed -i 's|<string name="app_name">.*</string>|<string name="app_name">AyatNusa</string>|' \
+            cap/android/app/src/main/res/values/strings.xml
+
+      - name: Sync Android
+        run: |
+          cd cap
           npx cap sync android
 
-          cd android
+      - name: Build APK and AAB
+        run: |
+          cd cap/android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug bundleRelease
 
-      - name: Simpan APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Al-Quran-Digital-APK
-          path: cap/android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          name: AyatNusa-APK
+          path: cap/android/app/build/outputs/apk/debug/*.apk
 
-      - name: Buat GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -e
-          cp cap/android/app/build/outputs/apk/debug/app-debug.apk Al-Quran-Digital.apk
-
-          gh release create "apk-${{ github.run_number }}" Al-Quran-Digital.apk \
-            --title "Al-Quran Digital APK ${{ github.run_number }}" \
-            --notes "APK Al-Quran Digital untuk Android." \
-            --prerelease
+      - name: Upload AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: AyatNusa-AAB
+          path: cap/android/app/build/outputs/bundle/release/*.aab
