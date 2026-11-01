@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       include_tafsir:
-        description: "Sertakan tafsir offline"
+        description: "Sertakan tafsir offline (memperbesar ukuran aplikasi)"
         required: true
         type: boolean
         default: false
@@ -40,10 +40,9 @@ jobs:
       - name: Build Quran data
         run: node scripts/build-data.js
 
-      - name: Prepare website
+      - name: Prepare lightweight website
         run: |
           mkdir -p cap/www/data/surah
-          mkdir -p cap/www/data/tafsir
           mkdir -p cap/www/lib
 
           cp website/index.html cap/www/
@@ -52,14 +51,43 @@ jobs:
           cp website/data/surah/*.json cap/www/data/surah/
 
           if [ "${{ inputs.include_tafsir }}" = "true" ]; then
+            mkdir -p cap/www/data/tafsir
             cp website/data/tafsir/*.json cap/www/data/tafsir/
           fi
+
+          # Memperkecil ukuran JSON tanpa mengubah isi datanya
+          node -e '
+            const fs = require("fs");
+            const path = require("path");
+
+            function compact(file) {
+              const data = JSON.parse(fs.readFileSync(file, "utf8"));
+              fs.writeFileSync(file, JSON.stringify(data));
+            }
+
+            compact("cap/www/data/surah-list.json");
+
+            for (const file of fs.readdirSync("cap/www/data/surah")) {
+              if (file.endsWith(".json")) {
+                compact(path.join("cap/www/data/surah", file));
+              }
+            }
+
+            if (fs.existsSync("cap/www/data/tafsir")) {
+              for (const file of fs.readdirSync("cap/www/data/tafsir")) {
+                if (file.endsWith(".json")) {
+                  compact(path.join("cap/www/data/tafsir", file));
+                }
+              }
+            }
+          '
 
       - name: Install Framework7
         run: |
           cd cap
           npm init -y
-          npm install framework7@8.3.0
+          npm install framework7@8.3.0 --no-audit --no-fund
+
           cp node_modules/framework7/framework7-bundle.min.js www/lib/
           cp node_modules/framework7/framework7-bundle.min.css www/lib/
 
@@ -72,7 +100,10 @@ jobs:
           node -e '
             const fs = require("fs");
             const u = new URL(process.env.SITE_URL);
-            if (u.protocol !== "https:") throw new Error("Website harus HTTPS");
+
+            if (u.protocol !== "https:") {
+              throw new Error("Website harus menggunakan HTTPS");
+            }
 
             let html = fs.readFileSync("index.html", "utf8");
 
@@ -90,33 +121,23 @@ jobs:
         run: |
           cd cap
 
-          npm install @capacitor/core@6.1.2 \
+          npm install --no-audit --no-fund \
+            @capacitor/core@6.1.2 \
             @capacitor/cli@6.1.2 \
             @capacitor/android@6.1.2
 
-          npx cap init AyatNusa com.omdropship.quran --web-dir www
+          npx cap init AyatNusa com.ayatnusa --web-dir www
           npx cap add android
 
-      - name: Prepare app icon and splash
+      - name: Generate Android launcher icon
         run: |
           cd cap
 
-          npm install --save-dev @capacitor/assets@3 sharp
+          npm install --no-save --no-audit --no-fund \
+            @capacitor/assets@3 sharp
 
           mkdir -p assets
-
           cp ../assets/icon.png assets/icon.png
-
-          node -e '
-            const sharp = require("sharp");
-            sharp("../assets/splash.png")
-              .resize(2732, 2732, {
-                fit: "contain",
-                background: "#064E3B"
-              })
-              .png()
-              .toFile("assets/splash.png");
-          '
 
           npx capacitor-assets generate --android
 
@@ -124,6 +145,26 @@ jobs:
         run: |
           sed -i 's|<string name="app_name">.*</string>|<string name="app_name">AyatNusa</string>|' \
             cap/android/app/src/main/res/values/strings.xml
+
+      - name: Enable Android release optimization
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("cap/android/app/build.gradle")
+          s = p.read_text()
+
+          if "minifyEnabled false" not in s:
+              raise SystemExit("Pengaturan minifyEnabled tidak ditemukan. Build dihentikan.")
+
+          s = s.replace(
+              "minifyEnabled false",
+              "minifyEnabled true\n            shrinkResources true",
+              1
+          )
+
+          p.write_text(s)
+          PY
 
       - name: Sync Android
         run: |
@@ -134,16 +175,18 @@ jobs:
         run: |
           cd cap/android
           chmod +x gradlew
-          ./gradlew assembleDebug bundleRelease
+          ./gradlew assembleDebug bundleRelease --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: AyatNusa-APK
           path: cap/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
 
       - name: Upload AAB
         uses: actions/upload-artifact@v4
         with:
           name: AyatNusa-AAB
           path: cap/android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
