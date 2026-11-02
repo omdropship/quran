@@ -230,6 +230,14 @@ async function openTafsir(n, idx) {
   }
 }
 
+/* ---------- tautan informasi (privasi, syarat, tentang) ---------- */
+
+const LEGAL_LINKS = [['privasi', 'Kebijakan Privasi'], ['syarat', 'Syarat &amp; Ketentuan'], ['tentang', 'Tentang &amp; Kontak']];
+
+function legalLinks() {
+  return LEGAL_LINKS.map(([sl, t]) => `<a class="external" rel="noopener" href="${REMOTE}/${sl}/">${t}</a>`).join(' · ');
+}
+
 /* ---------- tampilan ---------- */
 
 function renderSurahList(keyword = '') {
@@ -800,6 +808,11 @@ function settingsPage(direct) {
         </ul></div>
         <div class="block-footer">Matikan animasi bila terasa berat di HP lama.</div>
 
+        <div class="block-title">Informasi</div>
+        <div class="list inset"><ul>
+          ${LEGAL_LINKS.map(([sl, t]) => `<li><a class="item-link item-content external" rel="noopener" href="${REMOTE}/${sl}/"><div class="item-inner"><div class="item-title">${t}</div></div></a></li>`).join('')}
+        </ul></div>
+
         <div class="block"><a href="#" class="button button-outline" id="reset-prefs">Atur ulang pengaturan</a></div>
       </div>
     </div>`;
@@ -809,6 +822,8 @@ function settingsPage(direct) {
 
 async function initHome(e, page) {
   const err = page.el.querySelector('#home-error');
+  const legal = page.el.querySelector('#legal-links');
+  if (legal) legal.innerHTML = legalLinks();
 
   // Searchbar bawaan Framework7; pencarian dikerjakan sendiri (customSearch) agar ringan.
   const sbEl = page.el.querySelector('.searchbar');
