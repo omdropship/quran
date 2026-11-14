@@ -1,5 +1,4 @@
-
-name: Build AyatNusa Android
+name: Build Belajar Al-Quran Android
 
 on:
   workflow_dispatch:
@@ -10,10 +9,10 @@ on:
         type: boolean
         default: false
       site_url:
-        description: "Website AyatNusa"
+        description: "Website Belajar Al'Quran"
         required: true
         type: string
-        default: "https://quran254.vercel.app"
+        default: "https://www.ayatnusa.com"
 
 permissions:
   contents: read
@@ -126,7 +125,7 @@ jobs:
             @capacitor/cli@6.1.2 \
             @capacitor/android@6.1.2
 
-          npx cap init AyatNusa com.ayatnusa --web-dir www
+          npx cap init "Belajar Al'Quran" com.ayatnusa --web-dir www
           npx cap add android
 
       - name: Generate Android launcher icon
@@ -143,8 +142,15 @@ jobs:
 
       - name: Set app name
         run: |
-          sed -i 's|<string name="app_name">.*</string>|<string name="app_name">AyatNusa</string>|' \
-            cap/android/app/src/main/res/values/strings.xml
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          p = Path("cap/android/app/src/main/res/values/strings.xml")
+          s = p.read_text()
+          nama = "Belajar Al\\'Quran"
+          s = re.sub(r'(<string name="(?:app_name|title_activity_main)">)[^<]*(</string>)', lambda m: m.group(1) + nama + m.group(2), s)
+          p.write_text(s)
+          PY
 
       - name: Enable Android release optimization
         run: |
@@ -177,16 +183,22 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug bundleRelease --no-daemon
 
+      - name: Rename APK and AAB
+        run: |
+          mkdir -p out
+          cp cap/android/app/build/outputs/apk/debug/*.apk "out/Belajar-Al-Quran.apk"
+          cp cap/android/app/build/outputs/bundle/release/*.aab "out/Belajar-Al-Quran.aab"
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AyatNusa-APK
-          path: cap/android/app/build/outputs/apk/debug/*.apk
+          name: Belajar-Al-Quran-APK
+          path: out/Belajar-Al-Quran.apk
           if-no-files-found: error
 
       - name: Upload AAB
         uses: actions/upload-artifact@v4
         with:
-          name: AyatNusa-AAB
-          path: cap/android/app/build/outputs/bundle/release/*.aab
+          name: Belajar-Al-Quran-AAB
+          path: out/Belajar-Al-Quran.aab
           if-no-files-found: error
